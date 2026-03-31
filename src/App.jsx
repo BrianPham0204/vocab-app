@@ -5,6 +5,7 @@ import { convertSheetUrlToCsv, fetchCsvAsText, parseCSV, mapSheetRowsToData } fr
 import { useLocalStorage } from './hooks/useLocalStorage';
 import SideCard from './components/SideCard';
 import { buildChoiceQuestion, buildWriteWordQuestion, buildTranslationQuestion, normalizeText } from './utils/questions';
+import { requestTranslation } from './utils/translate';
 
 const tabs = [
   { id: 'en-to-vi', label: 'Từ Anh → Nghĩa Việt' },
@@ -42,6 +43,11 @@ export default function App() {
   const [draggingHeader, setDraggingHeader] = useState(null);
   const [dropHover, setDropHover] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [translateConfig, setTranslateConfig] = useLocalStorage('vocab_translate_config', {
+    endpoint: import.meta.env.VITE_TRANSLATE_API_URL || '',
+    sourceLang: 'en',
+    targetLang: 'vi'
+  });
 
   // random order per tab so words show randomly
   const [orders, setOrders] = useState({
@@ -53,9 +59,23 @@ export default function App() {
   const [showSentence, setShowSentence] = useState(false);
   // option hover state: which answer the mouse is currently over (null => use first option)
   const [hoveredOption, setHoveredOption] = useState(null);
-  const [undoStack, setUndoStack] = useState([]);
+  const [translatePopover, setTranslatePopover] = useState({
+    open: false,
+    text: '',
+    translatedText: '',
+    source: '',
+    loading: false,
+    error: '',
+    mode: 'floating',
+    placement: 'below',
+    x: 0,
+    y: 0
+  });
   // suppress hover immediately after question change (prevents remount-triggered onMouseEnter)
   const ignoreHoverUntilRef = useRef(0);
+  const translateAbortRef = useRef(null);
+  const translateCacheRef = useRef(new Map());
+  const translatePopupRef = useRef(null);
   
   // regenerate random orders whenever the data source changes
   useEffect(() => {
@@ -208,30 +228,165 @@ export default function App() {
     }));
   };
 
-  const pushUndoSnapshot = () => {
-    setUndoStack((prev) => [
-      ...prev.slice(-19),
-      {
-        activeTab,
-        quizState,
-        disabledMap,
-        reviewList,
-        hoveredOption
-      }
-    ]);
+  const isCoarsePointerDevice = () => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    return window.matchMedia('(pointer: coarse)').matches;
   };
 
-  const handleUndo = () => {
-    setUndoStack((prev) => {
-      if (!prev.length) return prev;
-      const last = prev[prev.length - 1];
-      setActiveTab(last.activeTab);
-      setQuizState(last.quizState);
-      setDisabledMap(last.disabledMap);
-      setReviewList(last.reviewList);
-      setHoveredOption(last.hoveredOption ?? null);
-      return prev.slice(0, -1);
+  const getSelectionPayload = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    const text = String(selection.toString() || '').trim();
+    if (!text) return null;
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if (!rect || (!rect.width && !rect.height)) return null;
+    return { text, rect };
+  };
+
+  const buildPopoverPlacement = (rect) => {
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const coarse = isCoarsePointerDevice();
+
+    if (coarse) {
+      return {
+        mode: 'sheet',
+        placement: 'bottom',
+        x: Math.round(viewportWidth / 2),
+        y: Math.round(viewportHeight - 24)
+      };
+    }
+
+    const estimatedWidth = Math.min(360, viewportWidth - 32);
+    const x = Math.min(
+      Math.max(rect.left + (rect.width / 2), 16 + (estimatedWidth / 2)),
+      viewportWidth - 16 - (estimatedWidth / 2)
+    );
+    const canPlaceBelow = rect.bottom + 220 < viewportHeight;
+
+    return {
+      mode: 'floating',
+      placement: canPlaceBelow ? 'below' : 'above',
+      x: Math.round(x),
+      y: Math.round(canPlaceBelow ? rect.bottom + 12 : Math.max(rect.top - 12, 16))
+    };
+  };
+
+  const findLocalTranslation = (text) => {
+    const normalized = normalizeText(text);
+    if (!normalized) return null;
+
+    const matched = (dataList || []).find((item) => {
+      const vocabulary = normalizeText(item?.vocabulary || '');
+      const meaning = normalizeText(item?.vietnamMeaning || '');
+      const synonym = normalizeText(item?.synonym || '');
+      return vocabulary === normalized || meaning === normalized || synonym === normalized;
     });
+
+    if (!matched) return null;
+
+    const sourceLang = translateConfig?.sourceLang || 'en';
+    const targetLang = translateConfig?.targetLang || 'vi';
+    const isToVietnamese = sourceLang.startsWith('en') && targetLang.startsWith('vi');
+    const translatedText = isToVietnamese
+      ? matched.vietnamMeaning || matched.learn || matched.synonym
+      : matched.vocabulary || matched.synonym || matched.vietnamMeaning;
+
+    if (!translatedText) return null;
+
+    return {
+      translatedText: String(translatedText),
+      provider: 'local-vocab'
+    };
+  };
+
+  const closeTranslatePopover = () => {
+    if (translateAbortRef.current) {
+      translateAbortRef.current.abort();
+      translateAbortRef.current = null;
+    }
+    setTranslatePopover((prev) => ({ ...prev, open: false }));
+  };
+
+  const handleTranslateShortcut = async () => {
+    const selectionPayload = getSelectionPayload();
+    if (!selectionPayload) return;
+
+    const { text, rect } = selectionPayload;
+    const placement = buildPopoverPlacement(rect);
+    const cacheKey = `${translateConfig?.sourceLang || 'en'}:${translateConfig?.targetLang || 'vi'}:${normalizeText(text)}`;
+    const cached = translateCacheRef.current.get(cacheKey);
+
+    setTranslatePopover({
+      open: true,
+      text,
+      translatedText: cached?.translatedText || '',
+      source: cached?.provider || '',
+      loading: !cached,
+      error: '',
+      ...placement
+    });
+
+    if (cached) return;
+
+    if (translateAbortRef.current) {
+      translateAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    translateAbortRef.current = controller;
+
+    try {
+      const apiResult = await requestTranslation({
+        endpoint: translateConfig?.endpoint || '',
+        text,
+        sourceLang: translateConfig?.sourceLang || 'en',
+        targetLang: translateConfig?.targetLang || 'vi',
+        signal: controller.signal
+      });
+
+      translateCacheRef.current.set(cacheKey, apiResult);
+      setTranslatePopover((prev) => ({
+        ...prev,
+        open: true,
+        translatedText: apiResult.translatedText,
+        source: apiResult.provider,
+        loading: false,
+        error: ''
+      }));
+    } catch (error) {
+      if (controller.signal.aborted) return;
+
+      const localResult = findLocalTranslation(text);
+      if (localResult) {
+        translateCacheRef.current.set(cacheKey, localResult);
+        setTranslatePopover((prev) => ({
+          ...prev,
+          open: true,
+          translatedText: localResult.translatedText,
+          source: localResult.provider,
+          loading: false,
+          error: ''
+        }));
+        return;
+      }
+
+      setTranslatePopover((prev) => ({
+        ...prev,
+        open: true,
+        translatedText: '',
+        source: '',
+        loading: false,
+        error: translateConfig?.endpoint
+          ? 'Khong the lay ban dich tu endpoint hien tai.'
+          : 'Chua cau hinh endpoint dich. Hay them Translation API URL trong Settings.'
+      }));
+    } finally {
+      if (translateAbortRef.current === controller) {
+        translateAbortRef.current = null;
+      }
+    }
   };
 
   // drag/drop handlers
@@ -278,7 +433,6 @@ export default function App() {
   const handleSelect = (option) => {
     if (activeTab === 'translation') return;
     if (currentTabState.checked) return;
-    pushUndoSnapshot();
  
     const idx = quizState[activeTab].index;
     const isCorrect = option === currentQuestion.answer;
@@ -346,7 +500,6 @@ export default function App() {
 
   const handleCheck = () => {
     if (!(activeTab === 'translation' || activeTab === 'write-word')) return;
-    pushUndoSnapshot();
     const input = currentTabState.input || '';
     const normalizedInput = normalizeText(input);
  
@@ -421,7 +574,6 @@ export default function App() {
   };
 
   const handleNext = () => {
-    pushUndoSnapshot();
     // wrap / recycle when reaching list length
     if (activeTab === 'translation' || activeTab === 'write-word') {
       const len = (dataList && dataList.length) || 1;
@@ -461,18 +613,49 @@ export default function App() {
         return;
       }
 
-      if ((e.metaKey || e.ctrlKey) && key && key.toLowerCase() === 'z') {
+      if (key === 'Escape' && translatePopover.open) {
         e.preventDefault();
-        handleUndo();
+        closeTranslatePopover();
+        return;
+      }
+
+      if (key && key.toLowerCase() === 'd') {
+        if (isEditable) return;
+        const selection = window.getSelection();
+        const text = String(selection?.toString() || '').trim();
+        if (!text) return;
+        e.preventDefault();
+        handleTranslateShortcut();
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [hoverDetail, currentQuestion, activeTab, quizState, dataList, orders, currentTabState, disabledMap, reviewList, hoveredOption]);
+  }, [hoverDetail, currentQuestion, activeTab, quizState, dataList, orders, currentTabState, translatePopover.open, translateConfig]);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!translatePopover.open) return;
+      if (translatePopupRef.current && translatePopupRef.current.contains(event.target)) return;
+      closeTranslatePopover();
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [translatePopover.open]);
+
+  useEffect(() => () => {
+    if (translateAbortRef.current) {
+      translateAbortRef.current.abort();
+    }
+  }, []);
 
   const handlePrev = () => {
-    pushUndoSnapshot();
     // wrap backwards
     if (activeTab === 'translation' || activeTab === 'write-word') {
       const len = (dataList && dataList.length) || 1;
@@ -486,7 +669,6 @@ export default function App() {
   };
 
   const handleReset = () => {
-    pushUndoSnapshot();
     if (activeTab === 'translation' || activeTab === 'write-word') {
       updateTabState(activeTab, { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 });
       setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
@@ -720,6 +902,34 @@ export default function App() {
                 );
               })() : <em>No headers to test</em>}
             </div>
+
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' }}>
+              <h4>Translation Popup</h4>
+              <div style={{ display: 'grid', gap: 10 }}>
+                <input
+                  placeholder="Translation API URL"
+                  value={translateConfig.endpoint}
+                  onChange={(e) => setTranslateConfig((prev) => ({ ...prev, endpoint: e.target.value }))}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    style={{ flex: 1 }}
+                    placeholder="Source lang"
+                    value={translateConfig.sourceLang}
+                    onChange={(e) => setTranslateConfig((prev) => ({ ...prev, sourceLang: e.target.value || 'en' }))}
+                  />
+                  <input
+                    style={{ flex: 1 }}
+                    placeholder="Target lang"
+                    value={translateConfig.targetLang}
+                    onChange={(e) => setTranslateConfig((prev) => ({ ...prev, targetLang: e.target.value || 'vi' }))}
+                  />
+                </div>
+                <p style={{ margin: 0, fontSize: 13, color: '#557261' }}>
+                  Nhan <strong>d</strong> sau khi boi den text de mo popup dich. De test tren mobile va may khac, nen dung mot translation endpoint co the truy cap qua LAN hoac domain thay vi chi tro vao localhost.
+                </p>
+              </div>
+            </div>
           </section>
         )}
 
@@ -743,8 +953,20 @@ export default function App() {
                   : currentQuestion?.title}
               </h2>
              </div>
-            <div className="prompt-box">
-              <span className="prompt-label">{activeTab === 'translation' ? 'Đề bài' : 'Câu hỏi'}</span>
+            <div
+              className="prompt-box"
+              onMouseEnter={() => {
+                const questionTarget = currentQuestion?.detail?.vocabulary || currentQuestion?.detail?.vietnamMeaning || null;
+                if (questionTarget) setHoveredOption(questionTarget);
+              }}
+              onTouchStart={() => {
+                const questionTarget = currentQuestion?.detail?.vocabulary || currentQuestion?.detail?.vietnamMeaning || null;
+                if (questionTarget) setHoveredOption(questionTarget);
+              }}
+            >
+              <span className="prompt-label">
+                {activeTab === 'translation' ? 'Đề bài' : 'Câu hỏi'}
+              </span>
               <p>{currentQuestion?.prompt}</p>
             </div>
 
@@ -793,21 +1015,27 @@ export default function App() {
                  {currentQuestion?.options?.map((option, idx) => {
                    const isDisabledOption = disabledOptionsForCurrent.has(option);
                    const disabled = lockAllForCurrent || isDisabledOption;
-                   const className = `option-button ${currentTabState.selected === option ? (lockAllForCurrent && option === currentQuestion.answer ? 'correct' : 'selected') : ''} ${isDisabledOption ? 'blurred' : ''}`;
+                   let stateClass = '';
+                   if (lockAllForCurrent && option === currentQuestion.answer) {
+                     stateClass = 'correct';
+                   } else if (isDisabledOption) {
+                     stateClass = 'wrong';
+                   } else if (currentTabState.selected === option) {
+                     stateClass = 'selected';
+                   }
+                   const className = `option-button ${stateClass}`.trim();
                    const handleOptionMouseEnter = (opt) => {
                      if (Date.now() < ignoreHoverUntilRef.current) return;
                      setHoveredOption(opt);
                    };
                    return (
-                     // wrapper captures mouse events even when inner button is disabled
                      <div
                        key={`${currentQuestion.id}-opt-wrap-${idx}`}
-                       className="option-wrapper"
+                       className="option-hitbox"
                        onMouseEnter={() => handleOptionMouseEnter(option)}
                        onTouchStart={() => handleOptionMouseEnter(option)}
                      >
                        <button
-                         key={`${currentQuestion.id}-opt-${idx}`}
                          className={className}
                          onClick={() => handleSelect(option)}
                          onFocus={() => handleOptionMouseEnter(option)}
@@ -826,7 +1054,6 @@ export default function App() {
             <div className="actions">
               <button className="secondary-button" onClick={handleNext}>Next</button>
               <button className="ghost-button" onClick={handleReset}>Reset</button>
-              <button className="ghost-button" onClick={handleUndo} disabled={!undoStack.length}>Undo</button>
             </div>
 
             <div className="data-structure learn-panel">
@@ -860,6 +1087,39 @@ export default function App() {
           </aside>
         </section>
       </main>
+
+      {translatePopover.open && (
+        <div
+          ref={translatePopupRef}
+          className={`translate-popover ${translatePopover.mode === 'sheet' ? 'sheet' : translatePopover.placement}`}
+          style={translatePopover.mode === 'sheet'
+            ? undefined
+            : {
+                left: `${translatePopover.x}px`,
+                top: `${translatePopover.y}px`
+              }}
+        >
+          <div className="translate-popover-header">
+            <span className="chip secondary">Quick Translate</span>
+            <button type="button" className="ghost-button translate-close" onClick={closeTranslatePopover}>Close</button>
+          </div>
+          <div className="translate-popover-body">
+            <p className="translate-selection">{translatePopover.text}</p>
+            {translatePopover.loading ? (
+              <p className="translate-muted">Dang dich...</p>
+            ) : translatePopover.error ? (
+              <p className="translate-error">{translatePopover.error}</p>
+            ) : (
+              <>
+                <p className="translate-result">{translatePopover.translatedText || 'Khong co ket qua.'}</p>
+                <p className="translate-muted">
+                  Nguon: {translatePopover.source || 'unknown'}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

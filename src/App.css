@@ -30,6 +30,15 @@ textarea {
   overflow: hidden;
 }
 
+.settings-panel {
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(136, 192, 154, 0.35);
+  box-shadow: 0 18px 40px rgba(50, 91, 66, 0.08);
+  backdrop-filter: blur(12px);
+  border-radius: 24px;
+  padding: 24px;
+}
+
 .background-blur {
   position: absolute;
   width: 320px;
@@ -169,7 +178,7 @@ textarea {
 
 .practice-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 6fr) minmax(0, 4fr);
   gap: 20px;
   align-items: start;
 }
@@ -178,10 +187,6 @@ textarea {
 .side-card {
   padding: 24px;
   border-radius: 28px;
-}
-
-.side-card {
-  width: 320px;
 }
 
 .card-header {
@@ -204,8 +209,6 @@ textarea {
 
 .chip.secondary {
   background: #eef8f0;
-  font-size: 0.74rem;
-  padding: 5px 10px;
 }
 
 .prompt-box,
@@ -249,7 +252,12 @@ textarea {
   gap: 14px;
 }
 
+.option-hitbox {
+  width: 100%;
+}
+
 .option-button {
+  width: 100%;
   border: 1px solid #d7eadc;
   padding: 16px;
   text-align: left;
@@ -277,6 +285,79 @@ textarea {
 .option-button.wrong {
   border-color: #e0a3a3;
   background: #fff0f0;
+}
+
+.translate-popover {
+  position: fixed;
+  z-index: 30;
+  width: min(360px, calc(100vw - 24px));
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(136, 192, 154, 0.4);
+  box-shadow: 0 18px 40px rgba(50, 91, 66, 0.16);
+  backdrop-filter: blur(12px);
+  border-radius: 22px;
+  padding: 16px;
+}
+
+.translate-popover.below {
+  transform: translate(-50%, 0);
+}
+
+.translate-popover.above {
+  transform: translate(-50%, -100%);
+}
+
+.translate-popover.sheet {
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  width: min(100vw - 20px, 460px);
+  border-radius: 24px;
+}
+
+.translate-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.translate-close {
+  padding: 8px 12px;
+}
+
+.translate-popover-body {
+  display: grid;
+  gap: 10px;
+}
+
+.translate-selection {
+  margin: 0;
+  font-weight: 700;
+  color: #173327;
+  word-break: break-word;
+}
+
+.translate-result {
+  margin: 0;
+  font-size: 1rem;
+  color: #234231;
+  white-space: pre-wrap;
+}
+
+.translate-muted,
+.translate-error {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.translate-muted {
+  color: #5a7265;
+}
+
+.translate-error {
+  color: #a44545;
 }
 
 .translation-area textarea {
@@ -402,7 +483,8 @@ textarea {
 
   .hero-card,
   .question-card,
-  .side-card {
+  .side-card,
+  .settings-panel {
     padding: 18px;
     border-radius: 22px;
   }
