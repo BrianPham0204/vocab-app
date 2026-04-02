@@ -37,6 +37,15 @@ export function seededShuffle(items, seedStr) {
   return cloned;
 }
 
+function randomShuffle(items) {
+  const cloned = [...items];
+  for (let i = cloned.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cloned[i], cloned[j]] = [cloned[j], cloned[i]];
+  }
+  return cloned;
+}
+
 function pickDistractors(arr, field, count = 3, seed) {
   const candidates = arr
     .filter((entry) => entry && entry[field] !== undefined && entry[field] !== null && String(entry[field]).trim() !== '')
@@ -60,7 +69,7 @@ export function buildChoiceQuestion(data, mode, index) {
     const optsRaw = [String(item.vietnamMeaning).trim(), ...distractors];
     const optsUniq = Array.from(new Set(optsRaw.filter((o) => o && String(o).trim())));
     if (!optsUniq.includes(String(item.vietnamMeaning).trim())) optsUniq.unshift(String(item.vietnamMeaning).trim());
-    const options = seededShuffle(optsUniq, seed + '-o').slice(0, 4);
+    const options = randomShuffle(optsUniq).slice(0, 4);
     return { id: `${mode}-${idx}`, title: 'Chọn nghĩa đúng', prompt: item.vocabulary, answer: item.vietnamMeaning, options, detail: item, index: idx };
   }
 
@@ -71,7 +80,7 @@ export function buildChoiceQuestion(data, mode, index) {
     const optsRaw = [String(item.vocabulary).trim(), ...distractors];
     const optsUniq = Array.from(new Set(optsRaw.filter((o) => o && String(o).trim())));
     if (!optsUniq.includes(String(item.vocabulary).trim())) optsUniq.unshift(String(item.vocabulary).trim());
-    const options = seededShuffle(optsUniq, seed + '-o').slice(0, 4);
+    const options = randomShuffle(optsUniq).slice(0, 4);
     return { id: `${mode}-${idx}`, title: 'Chọn từ tiếng Anh đúng', prompt: item.vietnamMeaning, answer: item.vocabulary, options, detail: item, index: idx };
   }
 
@@ -100,29 +109,96 @@ export function buildChoiceQuestion(data, mode, index) {
     const optsRaw = [String(item.vocabulary).trim(), ...distractors];
     const optsUniq = Array.from(new Set(optsRaw.filter((o) => o && String(o).trim())));
     if (!optsUniq.includes(String(item.vocabulary).trim())) optsUniq.unshift(String(item.vocabulary).trim());
-    const options = seededShuffle(optsUniq, seed + '-o').slice(0, 4);
+    const options = randomShuffle(optsUniq).slice(0, 4);
 
     const enSentence = String(item.sentences?.en || '');
     const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const roughStem = (word) => {
+      let w = normalizeText(word);
+      if (!w) return '';
+      if (w.endsWith('ied') && w.length > 4) return `${w.slice(0, -3)}y`;
+      if (w.endsWith('ing') && w.length > 5) return w.slice(0, -3);
+      if (w.endsWith('ed') && w.length > 4) return w.slice(0, -2);
+      if (w.endsWith('es') && w.length > 4) return w.slice(0, -2);
+      if (w.endsWith('s') && w.length > 3) return w.slice(0, -1);
+      return w;
+    };
+    const looseContains = (a, b) => a.length >= 3 && b.length >= 3 && (a.includes(b) || b.includes(a));
+
     let prompt = enSentence;
+    let blankedToken = String(item.vocabulary || '').trim();
     if (enSentence) {
       const fullWordRegex = new RegExp(`\\b${escapeReg(item.vocabulary)}\\b`, 'i');
-      if (fullWordRegex.test(enSentence)) prompt = enSentence.replace(fullWordRegex, '____');
-      else {
-        const tokens = item.vocabulary.split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length);
-        let done = false;
-        for (const t of tokens) {
-          const tkRegex = new RegExp(`\\b${escapeReg(t)}\\b`, 'i');
-          if (tkRegex.test(enSentence)) { prompt = enSentence.replace(tkRegex, '____'); done = true; break; }
+      if (fullWordRegex.test(enSentence)) {
+        const directMatch = enSentence.match(fullWordRegex);
+        if (directMatch && directMatch[0]) blankedToken = directMatch[0];
+        prompt = enSentence.replace(fullWordRegex, '____');
+      } else {
+        // Check each word in sentence: if a word contains/matches answer token (including simple verb inflections), blank that exact word.
+        const vocabNorm = normalizeText(item.vocabulary);
+        const vocabStem = roughStem(item.vocabulary);
+        const vocabParts = String(item.vocabulary)
+          .split(/\s+/)
+          .map((t) => normalizeText(t))
+          .filter(Boolean)
+          .sort((a, b) => b.length - a.length);
+
+        const sentenceWordRegex = /\b[A-Za-z'-]+\b/g;
+        let matchedToken = null;
+        let m;
+        while ((m = sentenceWordRegex.exec(enSentence)) !== null) {
+          const sentenceToken = m[0];
+          const tokenNorm = normalizeText(sentenceToken);
+          const tokenStem = roughStem(sentenceToken);
+          if (!tokenNorm) continue;
+
+          let matched = false;
+          if (tokenNorm === vocabNorm || tokenStem === vocabStem) matched = true;
+          if (!matched && (looseContains(tokenNorm, vocabNorm) || looseContains(tokenStem, vocabStem))) matched = true;
+          if (!matched) {
+            matched = vocabParts.some((part) => {
+              const partStem = roughStem(part);
+              return (
+                tokenNorm === part ||
+                tokenStem === partStem ||
+                looseContains(tokenNorm, part) ||
+                looseContains(tokenStem, partStem)
+              );
+            });
+          }
+
+          if (matched) {
+            matchedToken = { start: m.index, end: m.index + sentenceToken.length, text: sentenceToken };
+            break;
+          }
         }
-        if (!done) {
+
+        if (matchedToken) {
+          if (matchedToken.text) blankedToken = matchedToken.text;
+          prompt = `${enSentence.slice(0, matchedToken.start)}____${enSentence.slice(matchedToken.end)}`;
+        } else {
           const anyWordMatch = enSentence.match(/\b[A-Za-z'-]+\b/);
-          if (anyWordMatch) { const anyWord = anyWordMatch[0]; const anyRegex = new RegExp(`\\b${escapeReg(anyWord)}\\b`); prompt = enSentence.replace(anyRegex, '____'); }
+          if (anyWordMatch) {
+            const anyWord = anyWordMatch[0];
+            blankedToken = anyWord;
+            const anyRegex = new RegExp(`\\b${escapeReg(anyWord)}\\b`);
+            prompt = enSentence.replace(anyRegex, '____');
+          }
         }
       }
     } else prompt = '____';
 
-    return { id: `${mode}-${actualIdx}`, title: 'Chọn từ phù hợp vào chỗ trống', prompt, answer: item.vocabulary, options, detail: item, index: actualIdx };
+    return {
+      id: `${mode}-${actualIdx}`,
+      title: 'Chọn từ phù hợp vào chỗ trống',
+      prompt,
+      answer: item.vocabulary,
+      options,
+      detail: item,
+      index: actualIdx,
+      fullSentence: enSentence,
+      blankedToken
+    };
   }
 
   if (!item.vietnamMeaning || !String(item.vietnamMeaning).trim()) return null;
@@ -130,7 +206,7 @@ export function buildChoiceQuestion(data, mode, index) {
   const distractors = pickDistractors(others, 'vietnamMeaning', 3, seed + '-d');
   const optsRaw = [String(item.vietnamMeaning).trim(), ...distractors];
   const optsUniq = Array.from(new Set(optsRaw.filter((o) => o && String(o).trim())));
-  const options = seededShuffle(optsUniq, seed + '-o').slice(0, 4);
+  const options = randomShuffle(optsUniq).slice(0, 4);
   return { id: `${mode}-${idx}`, title: 'Trắc nghiệm', prompt: `Từ: ${item.vocabulary}`, answer: item.vietnamMeaning, options, detail: item, index: idx };
 }
 

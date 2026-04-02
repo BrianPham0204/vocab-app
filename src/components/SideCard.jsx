@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function SideCard({ activeTab, hoverDetail, speak }) {
+export default function SideCard({ activeTab, hoverDetail, speak, onSaveCurrentWord, canSaveCurrentWord }) {
   return (
     <>
       <div className="card-header">
@@ -25,6 +25,15 @@ export default function SideCard({ activeTab, hoverDetail, speak }) {
                 title="Speak word"
               >
                 🔊
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => onSaveCurrentWord && onSaveCurrentWord()}
+                disabled={!canSaveCurrentWord}
+                title="Save to Review"
+              >
+                Save
               </button>
             </div>
 

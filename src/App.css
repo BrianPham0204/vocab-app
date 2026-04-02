@@ -157,6 +157,74 @@ textarea {
   gap: 10px;
 }
 
+.source-switch.slap {
+  margin-left: auto;
+  position: relative;
+  width: 112px;
+  height: 34px;
+  border: 1px solid #d7ebdd;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f7fcf8 0%, #eef8f1 100%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.source-option {
+  position: relative;
+  z-index: 2;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #587865;
+  transition: color 0.2s ease;
+}
+
+.source-switch.is-org .source-option.org,
+.source-switch.is-rev .source-option.rev {
+  color: #1f5a39;
+}
+
+.source-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 50px;
+  height: 26px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7fca95 0%, #59ae75 100%);
+  box-shadow: 0 4px 10px rgba(42, 94, 60, 0.24);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.source-switch.is-rev .source-knob {
+  transform: translateX(56px);
+}
+
+.source-switch.is-slapping .source-knob {
+  animation: slapToggle 0.26s ease;
+}
+
+@keyframes slapToggle {
+  0% { transform: translateX(var(--from, 0)) rotate(0deg) scale(1); }
+  45% { transform: translateX(var(--mid, 28px)) rotate(-9deg) scale(1.04); }
+  100% { transform: translateX(var(--to, 56px)) rotate(0deg) scale(1); }
+}
+
+.source-switch.is-org {
+  --from: 56px;
+  --mid: 28px;
+  --to: 0;
+}
+
+.source-switch.is-rev {
+  --from: 0;
+  --mid: 28px;
+  --to: 56px;
+}
+
 .tab-button {
   border: none;
   border-radius: 999px;
@@ -191,8 +259,9 @@ textarea {
 
 .card-header {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 18px;
 }
 
@@ -244,6 +313,35 @@ textarea {
 .feedback-box {
   margin: 0;
   color: #244232;
+}
+
+.prompt-answer-highlight {
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.review-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.review-list {
+  display: grid;
+  gap: 10px;
+}
+
+.review-item {
+  border: 1px solid #dcecdf;
+  background: #f8fcf9;
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.review-meta {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #527160;
 }
 
 .options-grid {
@@ -460,6 +558,28 @@ textarea {
   color: #244232;
 }
 
+.saved-toast {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.96);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(27, 66, 44, 0.92);
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 9999;
+}
+
+.saved-toast.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
 @media (max-width: 960px) {
   .hero-card,
   .practice-grid {
@@ -495,5 +615,14 @@ textarea {
 
   .actions {
     flex-direction: column;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .source-switch.slap {
+    margin-left: 0;
   }
 }
