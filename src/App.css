@@ -20,7 +20,8 @@ body {
 }
 
 button,
-textarea {
+textarea,
+input {
   font: inherit;
 }
 
@@ -66,6 +67,99 @@ textarea {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
   padding: 32px 0 48px;
+}
+
+.countdown-widget {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f7fcf8 0%, #eff9f2 100%);
+  border: 1px solid #d8ecdd;
+  min-width: 0;
+}
+
+.countdown-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.countdown-header {
+  display: flex;
+  align-items: center;
+  color: #3f7155;
+}
+
+.clock-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.countdown-display {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  color: #173327;
+  min-width: 64px;
+}
+
+.countdown-display.is-finished {
+  color: #bd3d3d;
+}
+
+.countdown-controls {
+  display: grid;
+  grid-template-columns: minmax(88px, 1fr) repeat(2, minmax(64px, auto));
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.countdown-input {
+  width: 100%;
+  border: 1px solid #d7eadc;
+  border-radius: 12px;
+  padding: 7px 10px;
+  background: #f7fcf8;
+  color: #284837;
+  outline: none;
+}
+
+.countdown-input:focus {
+  border-color: #73bf8a;
+  box-shadow: 0 0 0 4px rgba(115, 191, 138, 0.15);
+}
+
+.countdown-button {
+  border: none;
+  border-radius: 12px;
+  padding: 7px 8px;
+  background: #e7f7ec;
+  color: #27563b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.countdown-button.start {
+  background: linear-gradient(135deg, #69bc82 0%, #449d63 100%);
+  color: #fff;
+}
+
+.countdown-alert {
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: #fff0f0;
+  border: 1px solid #efbbbb;
+  color: #b53636;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .hero-card,
@@ -122,6 +216,19 @@ textarea {
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
   align-self: stretch;
+}
+
+.top-tools-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 4fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-top-button {
+  width: 100%;
+  padding: 9px 12px;
 }
 
 .score-item {
@@ -330,6 +437,23 @@ textarea {
   background: #f7fcf8;
   border: 1px solid #e1f0e5;
   margin-bottom: 18px;
+}
+
+.library-complete-box {
+  padding: 24px;
+  border-radius: 24px;
+  background: #f7fcf8;
+  border: 1px solid #e1f0e5;
+}
+
+.library-complete-box h3 {
+  margin: 0;
+  color: #173327;
+}
+
+.library-complete-box p {
+  margin: 10px 0 0;
+  color: #456554;
 }
 
 .prompt-label,
@@ -552,8 +676,37 @@ textarea {
 .actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
   margin-top: 20px;
+}
+
+.library-progress {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 10px;
+}
+
+.library-progress-item {
+  min-width: 96px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: #f7fcf8;
+  border: 1px solid #d9eddc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.library-progress-item span {
+  font-size: 0.84rem;
+  color: #5b7c68;
+}
+
+.library-progress-item strong {
+  font-size: 1rem;
+  color: #1f5a39;
 }
 
 .primary-button,
@@ -643,6 +796,42 @@ textarea {
   transform: translate(-50%, -50%) scale(1);
 }
 
+.timeup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(213, 53, 53, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.timeup-overlay.show {
+  opacity: 1;
+}
+
+.timeup-toast {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.94);
+  padding: 16px 28px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #e54545 0%, #c81f1f 100%);
+  box-shadow: 0 24px 48px rgba(161, 24, 24, 0.26);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.timeup-toast.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
 @media (max-width: 960px) {
   .hero-card,
   .practice-grid {
@@ -664,6 +853,25 @@ textarea {
     padding-top: 20px;
   }
 
+  .countdown-widget {
+    width: 100%;
+    display: grid;
+    padding: 14px;
+  }
+
+  .countdown-display {
+    font-size: 1.8rem;
+  }
+
+  .countdown-controls {
+    grid-template-columns: 1fr 1fr 1fr;
+    width: 100%;
+  }
+
+  .top-tools-row {
+    grid-template-columns: 1fr;
+  }
+
   .hero-card,
   .question-card,
   .side-card,
@@ -678,6 +886,17 @@ textarea {
 
   .actions {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .library-progress {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .library-progress-item {
+    flex: 1;
+    min-width: 0;
   }
 
   .card-header {

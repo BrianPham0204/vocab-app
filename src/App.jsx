@@ -17,6 +17,7 @@ const mcqModes = [
   { id: 'vi-to-en', label: 'VN → EN' },
   { id: 'mixed', label: 'Cloze' }
 ];
+const mcqPracticeTabs = ['en-to-vi', 'vi-to-en', 'mixed'];
 const writingModes = [
   { id: 'write-word', label: 'Viết lại từ' },
   { id: 'translation', label: 'Viết lại câu' }
@@ -26,6 +27,52 @@ const libraryModes = [
   { id: 'writing-log', label: 'Writing Log' }
 ];
 const practiceTabs = ['en-to-vi', 'vi-to-en', 'mixed', 'write-word'];
+const DEFAULT_COUNTDOWN_SECONDS = 5 * 60;
+
+const parseCountdownInput = (rawValue) => {
+  const value = String(rawValue || '').trim();
+  if (!value) return 0;
+
+  if (!value.includes(':')) {
+    const minutes = Number.parseInt(value, 10);
+    return Number.isNaN(minutes) ? 0 : Math.max(0, minutes * 60);
+  }
+
+  const parts = value.split(':').map((part) => Number.parseInt(part.trim(), 10));
+  if (parts.some((part) => Number.isNaN(part) || part < 0)) return 0;
+
+  if (parts.length === 2) {
+    const [minutes, seconds] = parts;
+    return (minutes * 60) + Math.min(seconds, 59);
+  }
+
+  if (parts.length === 3) {
+    const [hours, minutes, seconds] = parts;
+    return (hours * 3600) + (Math.min(minutes, 59) * 60) + Math.min(seconds, 59);
+  }
+
+  return 0;
+};
+
+const formatCountdownTime = (totalSeconds) => {
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+  const pad = (value) => String(value).padStart(2, '0');
+
+  if (hours > 0) return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  return `${pad(minutes)}:${pad(seconds)}`;
+};
+
+const buildRandomOrderIndexes = (count) => {
+  const arr = Array.from({ length: count }, (_, i) => i);
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
 
 export default function App() {
   // persisted settings and data
@@ -92,6 +139,10 @@ export default function App() {
   const [translationWordCount, setTranslationWordCount] = useState(5);
   const [translationWords, setTranslationWords] = useState([]);
   const [pendingReviewRemoval, setPendingReviewRemoval] = useState(null);
+  const [countdownInput, setCountdownInput] = useState('05:00');
+  const [countdownSeconds, setCountdownSeconds] = useState(DEFAULT_COUNTDOWN_SECONDS);
+  const [isCountdownRunning, setIsCountdownRunning] = useState(false);
+  const [showTimeUpNotice, setShowTimeUpNotice] = useState(false);
   const activeTab = useMemo(() => {
     if (activeGroup === 'mcq') return mcqMode;
     if (activeGroup === 'writing') return writingMode;
@@ -105,6 +156,8 @@ export default function App() {
   const translatePopupRef = useRef(null);
   const savedToastTimerRef = useRef(null);
   const sourceSlapTimerRef = useRef(null);
+  const countdownTimerRef = useRef(null);
+  const timeUpNoticeTimerRef = useRef(null);
   
   const reviewSourceData = useMemo(() => {
     const list = Array.isArray(reviewList) ? reviewList : [];
@@ -149,6 +202,20 @@ export default function App() {
     practiceSource === 'review' ? reviewSourceData : (dataList || [])
   ), [practiceSource, reviewSourceData, dataList]);
 
+  useEffect(() => {
+    if (!isPracticeTab || practiceSource !== 'review' || reviewSourceData.length > 0) {
+      return;
+    }
+
+    setPracticeSource('all');
+    setPendingReviewRemoval(null);
+    setHoveredOption(null);
+    setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
+    updateTabState(activeTab, activeTab === 'write-word'
+      ? { index: 0, input: '', checked: false, feedback: '' }
+      : { index: 0, selected: '', checked: false, feedback: '' });
+  }, [activeTab, isPracticeTab, practiceSource, reviewSourceData.length]);
+
   const pickRandomVocabularyWords = (count) => {
     const pool = (dataList || [])
       .map((it) => String(it?.vocabulary || '').trim())
@@ -176,6 +243,44 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataList]);
 
+  useEffect(() => {
+    if (!isCountdownRunning) {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+      return;
+    }
+
+    countdownTimerRef.current = setInterval(() => {
+      setCountdownSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownTimerRef.current);
+          countdownTimerRef.current = null;
+          setIsCountdownRunning(false);
+          setShowTimeUpNotice(true);
+          playTimeUpSound();
+          if (timeUpNoticeTimerRef.current) {
+            clearTimeout(timeUpNoticeTimerRef.current);
+          }
+          timeUpNoticeTimerRef.current = setTimeout(() => {
+            setShowTimeUpNotice(false);
+            timeUpNoticeTimerRef.current = null;
+          }, 3375);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+    };
+  }, [isCountdownRunning]);
+
   // regenerate random orders whenever the active practice data source changes
   useEffect(() => {
     const n = (practiceDataList && practiceDataList.length) || 0;
@@ -184,19 +289,11 @@ export default function App() {
       setOrders({ 'en-to-vi': [], 'vi-to-en': [], mixed: [], 'write-word': [] });
       return;
     }
-    const makeOrder = () => {
-      const arr = Array.from({ length: n }, (_, i) => i);
-      for (let i = arr.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-      }
-      return arr;
-    };
     setOrders({
-      'en-to-vi': makeOrder(),
-      'vi-to-en': makeOrder(),
-      mixed: makeOrder(),
-      'write-word': makeOrder()
+      'en-to-vi': buildRandomOrderIndexes(n),
+      'vi-to-en': buildRandomOrderIndexes(n),
+      mixed: buildRandomOrderIndexes(n),
+      'write-word': buildRandomOrderIndexes(n)
     });
   }, [practiceDataList]);
 
@@ -293,11 +390,23 @@ export default function App() {
     // map logical quiz index to a randomized data index per tab (orders)
     const order = orders[activeTab] && orders[activeTab].length ? orders[activeTab] : null;
     const logicalIndex = activeIndex;
-    const dataIndex = order ? order[logicalIndex % order.length] : logicalIndex;
+    if (mcqPracticeTabs.includes(activeTab) && order && logicalIndex >= order.length) {
+      return null;
+    }
+    const dataIndex = order ? order[logicalIndex] : logicalIndex;
     return buildChoiceQuestion(practiceDataList, activeTab, dataIndex);
   }, [activeTab, practiceDataList, orders, activeIndex, writeWordIndex, translationWords, translationWordCount]);
 
   const currentTabState = quizState[activeTab];
+  const isMcqTab = mcqPracticeTabs.includes(activeTab);
+  const activeOrderLength = (orders[activeTab] && orders[activeTab].length) || 0;
+  const isMcqLibraryComplete = isMcqTab && activeOrderLength > 0 && activeIndex >= activeOrderLength;
+  const learnedCount = isMcqTab
+    ? Math.min(activeIndex + (currentTabState?.checked ? 1 : 0), activeOrderLength)
+    : 0;
+  const remainCount = isMcqTab
+    ? Math.max(activeOrderLength - learnedCount, 0)
+    : 0;
 
   // detail object for side frame:
   // - for write-word tab, always show the correct answer's data (currentQuestion.detail)
@@ -542,6 +651,34 @@ export default function App() {
     } catch (e) {
       // ignore if not supported
       // console.warn('Speech not supported', e);
+    }
+  };
+
+  const playTimeUpSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      const audioContext = new AudioContextClass();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      const now = audioContext.currentTime;
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(660, now);
+      oscillator.frequency.exponentialRampToValueAtTime(440, now + 0.32);
+
+      gainNode.gain.setValueAtTime(0.0001, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.18, now + 0.04);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.4);
+      oscillator.onended = () => audioContext.close();
+    } catch (error) {
+      // ignore audio errors in browsers with stricter autoplay policies
     }
   };
 
@@ -833,8 +970,10 @@ export default function App() {
       clearDisabledForIndex(activeTab, newIndex);
       return;
     }
-    const len = (orders[activeTab] && orders[activeTab].length) || (practiceDataList && practiceDataList.length) || 1;
-    const newIndex = (currentTabState.index + 1) % len;
+    const len = (orders[activeTab] && orders[activeTab].length) || (practiceDataList && practiceDataList.length) || 0;
+    const newIndex = mcqPracticeTabs.includes(activeTab)
+      ? Math.min(currentTabState.index + 1, len)
+      : ((currentTabState.index + 1) % (len || 1));
     updateTabState(activeTab, { index: newIndex, selected: '', checked: false, feedback: '' });
     clearDisabledForIndex(activeTab, newIndex);
   };
@@ -943,7 +1082,50 @@ export default function App() {
     if (sourceSlapTimerRef.current) {
       clearTimeout(sourceSlapTimerRef.current);
     }
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+    }
+    if (timeUpNoticeTimerRef.current) {
+      clearTimeout(timeUpNoticeTimerRef.current);
+    }
   }, []);
+
+  const handleStartCountdown = () => {
+    const parsedSeconds = countdownSeconds > 0 ? countdownSeconds : parseCountdownInput(countdownInput);
+    if (parsedSeconds <= 0) {
+      setShowTimeUpNotice(true);
+      if (timeUpNoticeTimerRef.current) {
+        clearTimeout(timeUpNoticeTimerRef.current);
+      }
+      timeUpNoticeTimerRef.current = setTimeout(() => {
+        setShowTimeUpNotice(false);
+        timeUpNoticeTimerRef.current = null;
+      }, 2000);
+      return;
+    }
+    setCountdownSeconds(parsedSeconds);
+    setShowTimeUpNotice(false);
+    setIsCountdownRunning(true);
+  };
+
+  const handlePauseCountdown = () => {
+    setIsCountdownRunning(false);
+  };
+
+  const handleResetCountdown = () => {
+    const parsedSeconds = parseCountdownInput(countdownInput) || DEFAULT_COUNTDOWN_SECONDS;
+    setIsCountdownRunning(false);
+    setCountdownSeconds(parsedSeconds);
+    setShowTimeUpNotice(false);
+  };
+
+  const handleCountdownInputChange = (value) => {
+    setCountdownInput(value);
+    if (!isCountdownRunning) {
+      setCountdownSeconds(parseCountdownInput(value));
+      setShowTimeUpNotice(false);
+    }
+  };
 
   const handlePrev = () => {
     setPendingReviewRemoval(null);
@@ -963,9 +1145,35 @@ export default function App() {
       updateTabState(activeTab, { index: newIndex, input: '', checked: false, feedback: '' });
       return;
     }
-    const len = (orders[activeTab] && orders[activeTab].length) || (practiceDataList && practiceDataList.length) || 1;
-    const newIndex = (currentTabState.index - 1 + len) % len;
+    const len = (orders[activeTab] && orders[activeTab].length) || (practiceDataList && practiceDataList.length) || 0;
+    const newIndex = mcqPracticeTabs.includes(activeTab)
+      ? Math.max(currentTabState.index - 1, 0)
+      : ((currentTabState.index - 1 + (len || 1)) % (len || 1));
     updateTabState(activeTab, { index: newIndex, selected: '', checked: false, feedback: '' });
+  };
+
+  const handleResetLibrary = () => {
+    const n = (practiceDataList && practiceDataList.length) || 0;
+    setOrders((prev) => ({
+      ...(prev || {}),
+      'en-to-vi': buildRandomOrderIndexes(n),
+      'vi-to-en': buildRandomOrderIndexes(n),
+      mixed: buildRandomOrderIndexes(n)
+    }));
+    setPendingReviewRemoval(null);
+    setHoveredOption(null);
+    setDisabledMap((prev) => ({
+      ...(prev || {}),
+      'en-to-vi': {},
+      'vi-to-en': {},
+      mixed: {}
+    }));
+    setQuizState((prev) => ({
+      ...prev,
+      'en-to-vi': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
+      'vi-to-en': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
+      mixed: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 }
+    }));
   };
 
   const handleReset = () => {
@@ -1104,7 +1312,7 @@ export default function App() {
     }
   };
 
-  if (!currentQuestion && activeTab !== 'review' && activeTab !== 'writing-log') {
+  if (!currentQuestion && !isMcqLibraryComplete && activeTab !== 'review' && activeTab !== 'writing-log') {
     return (
       <div className="app-shell">
         <main className="container">
@@ -1203,7 +1411,49 @@ export default function App() {
             <div className="score-item"><span>Điểm</span><strong>{currentTabState.score}</strong></div>
             <div className="score-item"><span>Đã làm</span><strong>{currentTabState.answered}</strong></div>
             <div className="score-item"><span>Tab</span><strong>{activeModeLabel || activeGroupLabel}</strong></div>
-            <div style={{ marginLeft: 12 }}><button className="ghost-button" onClick={() => setSettingsOpen((s) => !s)}>Settings</button></div>
+            <div className="top-tools-row">
+              <button className="ghost-button settings-top-button" onClick={() => setSettingsOpen((s) => !s)}>Settings</button>
+
+              <div className="countdown-widget">
+                <div className="countdown-meta">
+                  <div className="countdown-header">
+                    <svg className="clock-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 7.25V12.15L15.3 14.1" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M7.25 3.8L4.4 6.15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                      <path d="M16.75 3.8L19.6 6.15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                      <circle cx="12" cy="12.2" r="7.7" stroke="currentColor" strokeWidth="2.2" />
+                    </svg>
+                  </div>
+                  <div className={`countdown-display ${countdownSeconds === 0 ? 'is-finished' : ''}`}>
+                    {formatCountdownTime(countdownSeconds)}
+                  </div>
+                </div>
+
+                <div className="countdown-controls">
+                  <input
+                    className="countdown-input"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="05:00"
+                    value={countdownInput}
+                    onChange={(e) => handleCountdownInputChange(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    aria-label="Nhap thoi gian countdown"
+                  />
+                  <button
+                    type="button"
+                    className="countdown-button start"
+                    onClick={isCountdownRunning ? handlePauseCountdown : handleStartCountdown}
+                  >
+                    {isCountdownRunning ? 'Pause' : 'Start'}
+                  </button>
+                  <button type="button" className="countdown-button" onClick={handleResetCountdown}>
+                    Reset
+                  </button>
+                </div>
+
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1352,7 +1602,7 @@ export default function App() {
 
         <section className="practice-grid">
           <article className="question-card">
-             <div className="card-header">
+            <div className="card-header">
               <div>
                 <span className="chip">
                   {activeGroupLabel}
@@ -1419,7 +1669,8 @@ export default function App() {
                   <button type="button" className="ghost-button" onClick={() => refreshTranslationWords(translationWordCount)}>Random</button>
                 </div>
               )}
-             </div>
+            </div>
+
             {activeTab === 'review' ? (
               <div className="review-panel">
                 <div className="actions" style={{ marginBottom: 12 }}>
@@ -1474,6 +1725,17 @@ export default function App() {
                     </p>
                   </div>
                 )}
+              </div>
+            ) : isMcqLibraryComplete ? (
+              <div className="library-complete-box">
+                <span className="prompt-label">Library complete</span>
+                <h3>Bạn đã học hết toàn bộ từ trong bộ hiện tại.</h3>
+                <p>
+                  Bấm <strong>Reset Library</strong> để xáo trộn và hiển thị lại toàn bộ từ vựng.
+                </p>
+                <div className="actions">
+                  <button className="primary-button" onClick={handleResetLibrary}>Reset Library</button>
+                </div>
               </div>
             ) : (
               <>
@@ -1597,13 +1859,28 @@ export default function App() {
                  )}
                 <div className={`feedback-box ${currentTabState.feedback ? 'show' : ''}`}>{currentTabState.feedback || 'Chọn đáp án.'}</div>
 
-            <div className="actions">
+                <div className="actions">
                   <button className="secondary-button" onClick={handleNext}>Next →</button>
+                  {isMcqTab && (
+                    <button className="secondary-button" onClick={handleResetLibrary}>Reset Library</button>
+                  )}
+                  {isMcqTab && (
+                    <div className="library-progress">
+                      <div className="library-progress-item">
+                        <span>Learned</span>
+                        <strong>{learnedCount}</strong>
+                      </div>
+                      <div className="library-progress-item">
+                        <span>Remain</span>
+                        <strong>{remainCount}</strong>
+                      </div>
+                    </div>
+                  )}
                   {activeTab === 'translation' ? (
                     <button className="primary-button" onClick={handleCheck}>Confirm</button>
-                  ) : (
+                  ) : activeTab === 'write-word' ? (
                     <button className="ghost-button" onClick={handleReset}>Reset</button>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="data-structure learn-panel">
@@ -1686,6 +1963,11 @@ export default function App() {
         </div>
       )}
       <div className={`saved-toast ${showSavedToast ? 'show' : ''}`}>Saved</div>
+      <div className={`timeup-overlay ${showTimeUpNotice ? 'show' : ''}`}>
+        <div className={`timeup-toast ${showTimeUpNotice ? 'show' : ''}`} role="status">
+          Hết giờ rồi!
+        </div>
+      </div>
     </div>
   );
 }
