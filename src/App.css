@@ -265,6 +265,42 @@ textarea {
   margin-bottom: 18px;
 }
 
+.translation-header-controls {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.translation-header-controls input {
+  width: 72px;
+}
+
+.mode-switch {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mode-pill {
+  border: 1px solid #d7ebdd;
+  background: #f7fcf8;
+  color: #42604f;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mode-pill.active {
+  border-color: #8cc8a1;
+  background: #ecf8f0;
+  color: #1f5a39;
+}
+
 .chip {
   display: inline-flex;
   width: fit-content;
@@ -342,6 +378,33 @@ textarea {
   margin-top: 6px;
   font-size: 13px;
   color: #527160;
+}
+
+.translation-words-box {
+  padding: 14px;
+}
+
+.translation-words-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.translation-word-chip {
+  border: 1px solid #d4e9da;
+  background: #f2fbf5;
+  color: #2f5e43;
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.translation-word-chip:hover,
+.translation-word-chip:focus {
+  background: #e6f6ec;
+  border-color: #9accab;
+  outline: none;
 }
 
 .options-grid {
@@ -623,6 +686,14 @@ textarea {
   }
 
   .source-switch.slap {
+    margin-left: 0;
+  }
+
+  .translation-header-controls {
+    margin-left: 0;
+  }
+
+  .mode-switch {
     margin-left: 0;
   }
 }

@@ -1,19 +1,29 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { vocabularyData as localVocabularyData, translationData } from './data/mockData';
+import { vocabularyData as localVocabularyData } from './data/mockData';
 import './App.css';
 import { convertSheetUrlToCsv, fetchCsvAsText, parseCSV, mapSheetRowsToData } from './utils/sheet';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import SideCard from './components/SideCard';
-import { buildChoiceQuestion, buildWriteWordQuestion, buildTranslationQuestion, normalizeText } from './utils/questions';
+import { buildChoiceQuestion, buildWriteWordQuestion, normalizeText } from './utils/questions';
 import { requestTranslation } from './utils/translate';
 
-const tabs = [
-  { id: 'en-to-vi', label: 'Từ Anh → Nghĩa Việt' },
-  { id: 'vi-to-en', label: 'Nghĩa Việt → Từ Anh' },
-  { id: 'mixed', label: 'Trắc nghiệm 4 đáp án' },
-  { id: 'write-word', label: 'Viết Lại Từ' },
-  { id: 'review', label: 'Review' },
+const groupedTabs = [
+  { id: 'mcq', label: 'Multiple Choice' },
+  { id: 'writing', label: 'Writing' },
+  { id: 'library', label: 'Review & Log' }
+];
+const mcqModes = [
+  { id: 'en-to-vi', label: 'EN → VN' },
+  { id: 'vi-to-en', label: 'VN → EN' },
+  { id: 'mixed', label: 'Cloze' }
+];
+const writingModes = [
+  { id: 'write-word', label: 'Viết lại từ' },
   { id: 'translation', label: 'Viết lại câu' }
+];
+const libraryModes = [
+  { id: 'review', label: 'Review' },
+  { id: 'writing-log', label: 'Writing Log' }
 ];
 const practiceTabs = ['en-to-vi', 'vi-to-en', 'mixed', 'write-word'];
 
@@ -34,9 +44,13 @@ export default function App() {
   const [dataList, setDataList] = useLocalStorage('vocab_data', localVocabularyData || []);
   // review list (wrong answers)
   const [reviewList, setReviewList] = useLocalStorage('vocab_review', []);
+  const [writingLogList, setWritingLogList] = useLocalStorage('vocab_writing_log', []);
 
   // UI state
-  const [activeTab, setActiveTab] = useState('en-to-vi');
+  const [activeGroup, setActiveGroup] = useState('mcq');
+  const [mcqMode, setMcqMode] = useState('en-to-vi');
+  const [writingMode, setWritingMode] = useState('write-word');
+  const [libraryMode, setLibraryMode] = useState('review');
   const [practiceSource, setPracticeSource] = useLocalStorage('vocab_practice_source', 'all');
   const [sheetHeaders, setSheetHeaders] = useState([]);
   const [sheetPreviewRows, setSheetPreviewRows] = useState([]);
@@ -75,6 +89,14 @@ export default function App() {
   });
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [sourceSlapActive, setSourceSlapActive] = useState(false);
+  const [translationWordCount, setTranslationWordCount] = useState(5);
+  const [translationWords, setTranslationWords] = useState([]);
+  const [pendingReviewRemoval, setPendingReviewRemoval] = useState(null);
+  const activeTab = useMemo(() => {
+    if (activeGroup === 'mcq') return mcqMode;
+    if (activeGroup === 'writing') return writingMode;
+    return libraryMode;
+  }, [activeGroup, mcqMode, writingMode, libraryMode]);
   const isPracticeTab = practiceTabs.includes(activeTab);
   // suppress hover immediately after question change (prevents remount-triggered onMouseEnter)
   const ignoreHoverUntilRef = useRef(0);
@@ -127,6 +149,33 @@ export default function App() {
     practiceSource === 'review' ? reviewSourceData : (dataList || [])
   ), [practiceSource, reviewSourceData, dataList]);
 
+  const pickRandomVocabularyWords = (count) => {
+    const pool = (dataList || [])
+      .map((it) => String(it?.vocabulary || '').trim())
+      .filter(Boolean);
+    const uniquePool = Array.from(new Set(pool));
+    const safeCount = Math.max(1, Math.min(Number(count) || 1, uniquePool.length || 1));
+    const shuffled = [...uniquePool];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, safeCount);
+  };
+
+  const refreshTranslationWords = (requestedCount = translationWordCount) => {
+    const words = pickRandomVocabularyWords(requestedCount);
+    setTranslationWords(words);
+    updateTabState('translation', { input: '', checked: false, feedback: '' });
+  };
+
+  useEffect(() => {
+    if (!translationWords.length && (dataList || []).length) {
+      setTranslationWords(pickRandomVocabularyWords(translationWordCount));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataList]);
+
   // regenerate random orders whenever the active practice data source changes
   useEffect(() => {
     const n = (practiceDataList && practiceDataList.length) || 0;
@@ -158,7 +207,8 @@ export default function App() {
     mixed: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
     'write-word': { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 },
     translation: { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 },
-    review: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 }
+    review: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
+    'writing-log': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 }
   });
 
   // disabled map for wrong choices per tab/index
@@ -216,12 +266,22 @@ export default function App() {
   }, [sheetUrl]);
 
   const activeIndex = quizState[activeTab]?.index || 0;
-  const translationIndex = quizState.translation?.index || 0;
   const writeWordIndex = quizState['write-word']?.index || 0;
 
   const currentQuestion = useMemo(() => {
     if (activeTab === 'translation') {
-      return buildTranslationQuestion(translationIndex, translationData);
+      const words = translationWords.length ? translationWords : pickRandomVocabularyWords(translationWordCount);
+      return {
+        id: `translation-writing-${words.join('|')}`,
+        title: 'Viết đoạn văn theo từ gợi ý',
+        prompt: 'Viết đoạn văn sử dụng các từ gợi ý.',
+        answer: '',
+        options: [],
+        detail: null
+      };
+    }
+    if (activeTab === 'writing-log') {
+      return null;
     }
     if (activeTab === 'write-word') {
       // map logical to randomized index same as other tabs
@@ -235,7 +295,7 @@ export default function App() {
     const logicalIndex = activeIndex;
     const dataIndex = order ? order[logicalIndex % order.length] : logicalIndex;
     return buildChoiceQuestion(practiceDataList, activeTab, dataIndex);
-  }, [activeTab, practiceDataList, orders, activeIndex, translationIndex, writeWordIndex]);
+  }, [activeTab, practiceDataList, orders, activeIndex, writeWordIndex, translationWords, translationWordCount]);
 
   const currentTabState = quizState[activeTab];
 
@@ -256,7 +316,8 @@ export default function App() {
     // try find matching row in dataList: match vocabulary or vietnamMeaning (robust compare)
     const norm = (s) => normalizeText(String(s || ''));
     const targetNorm = norm(optToMatch);
-    const found = (practiceDataList || []).find((it) => {
+    const detailLookupData = activeTab === 'translation' ? (dataList || []) : (practiceDataList || []);
+    const found = detailLookupData.find((it) => {
       if (!it) return false;
       if (String(it.vocabulary || '') === optToMatch) return true;
       if (String(it.vietnamMeaning || '') === optToMatch) return true;
@@ -265,7 +326,7 @@ export default function App() {
       return false;
     });
     return found || currentQuestion.detail || null;
-  }, [hoveredOption, currentQuestion, practiceDataList, activeTab, currentTabState]);
+  }, [hoveredOption, currentQuestion, practiceDataList, dataList, activeTab, currentTabState]);
   // clear hover when question changes (keeps default first option)
   useEffect(() => {
     // do NOT clear hoveredOption here — keep last mouse-pointed vocab across navigation
@@ -536,12 +597,38 @@ export default function App() {
     });
   };
 
+  const removeReviewEntry = (entryLike) => {
+    const detail = entryLike?.detail || null;
+    const keys = [
+      detail?.vocabulary,
+      detail?.vietnamMeaning,
+      entryLike?.answer,
+      entryLike?.word
+    ]
+      .map((v) => normalizeText(String(v || '').trim()))
+      .filter(Boolean);
+    if (!keys.length) return;
+
+    setReviewList((prev) => {
+      const list = Array.isArray(prev) ? prev : [];
+      const findKey = (it) => normalizeText(
+        it?.word
+        || it?.detail?.vocabulary
+        || it?.answer
+        || it?.detail?.vietnamMeaning
+        || ''
+      );
+      return list.filter((it) => !keys.includes(findKey(it)));
+    });
+  };
+
   // selection behavior: immediate feedback; wrong disables that option; Next moves on (no auto-advance)
   const handleSelect = (option) => {
     if (activeTab === 'translation') return;
     if (currentTabState.checked) return;
     setHoveredOption(option);
     const shouldTrackWrongInReview = !(isPracticeTab && practiceSource === 'review');
+    const shouldRemoveWhenCorrectInReview = isPracticeTab && practiceSource === 'review';
  
     const idx = quizState[activeTab].index;
     const isCorrect = option === currentQuestion.answer;
@@ -554,12 +641,25 @@ export default function App() {
         score: currentTabState.score + 1,
         answered: currentTabState.answered + 1
       });
+      if (shouldRemoveWhenCorrectInReview) {
+        setPendingReviewRemoval({
+          tabId: activeTab,
+          questionId: currentQuestion?.id || null,
+          entryLike: {
+            answer: currentQuestion.answer,
+            detail: currentQuestion.detail || null
+          }
+        });
+      } else {
+        setPendingReviewRemoval(null);
+      }
       setDisabledMap((prev) => {
         const tabMap = { ...(prev[activeTab] || {}) };
         tabMap[idx] = { lockAll: true };
         return { ...prev, [activeTab]: tabMap };
       });
     } else {
+      setPendingReviewRemoval(null);
       updateTabState(activeTab, {
         feedback: `Sai. Đáp án đúng: ${currentQuestion.answer}`,
         answered: currentTabState.answered + 1
@@ -606,6 +706,33 @@ export default function App() {
     const input = currentTabState.input || '';
     const normalizedInput = normalizeText(input);
     const shouldTrackWrongInReview = !(isPracticeTab && practiceSource === 'review');
+    const shouldRemoveWhenCorrectInReview = isPracticeTab && practiceSource === 'review';
+
+    if (activeTab === 'translation') {
+      const trimmed = String(input || '').trim();
+      if (!trimmed) {
+        updateTabState('translation', {
+          checked: true,
+          feedback: 'Hãy viết đoạn văn trước khi Confirm.'
+        });
+        return;
+      }
+      const words = translationWords.length ? translationWords : pickRandomVocabularyWords(translationWordCount);
+      const entry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        ts: Date.now(),
+        words,
+        content: trimmed
+      };
+      setWritingLogList((prev) => [entry, ...(Array.isArray(prev) ? prev : [])]);
+      updateTabState('translation', {
+        input: '',
+        checked: true,
+        feedback: 'Đã lưu vào Writing Log.'
+      });
+      refreshTranslationWords(translationWordCount);
+      return;
+    }
  
     // For write-word tab accept vocabulary OR any synonym token
     if (activeTab === 'write-word') {
@@ -619,6 +746,18 @@ export default function App() {
         score: currentTabState.score + (isCorrect ? 1 : 0),
         answered: currentTabState.answered + 1
       });
+      if (isCorrect && shouldRemoveWhenCorrectInReview) {
+        setPendingReviewRemoval({
+          tabId: activeTab,
+          questionId: currentQuestion?.id || null,
+          entryLike: {
+            answer: currentQuestion.answer,
+            detail: currentQuestion.detail || null
+          }
+        });
+      } else {
+        setPendingReviewRemoval(null);
+      }
       if (!isCorrect && shouldTrackWrongInReview) {
         upsertReviewEntry({
           tab: activeTab,
@@ -663,12 +802,32 @@ export default function App() {
     });
   };
 
+  const clearDisabledForTab = (tabId) => {
+    setDisabledMap((prev) => ({ ...(prev || {}), [tabId]: {} }));
+  };
+
   const handleNext = () => {
+    if (
+      pendingReviewRemoval
+      && pendingReviewRemoval.tabId === activeTab
+      && pendingReviewRemoval.questionId
+      && pendingReviewRemoval.questionId === currentQuestion?.id
+    ) {
+      removeReviewEntry(pendingReviewRemoval.entryLike || {});
+      setPendingReviewRemoval(null);
+    }
+    setHoveredOption(null);
+    if (isPracticeTab && practiceSource === 'review') {
+      clearDisabledForTab(activeTab);
+    }
     // wrap / recycle when reaching list length
-    if (activeTab === 'translation' || activeTab === 'write-word') {
-      const len = activeTab === 'translation'
-        ? (translationData && translationData.length) || 1
-        : (practiceDataList && practiceDataList.length) || 1;
+    if (activeTab === 'translation') {
+      refreshTranslationWords(translationWordCount);
+      updateTabState(activeTab, { input: '', checked: false, feedback: '' });
+      return;
+    }
+    if (activeTab === 'write-word') {
+      const len = (practiceDataList && practiceDataList.length) || 1;
       const newIndex = (quizState[activeTab].index + 1) % len;
       updateTabState(activeTab, { index: newIndex, input: '', checked: false, feedback: '' });
       clearDisabledForIndex(activeTab, newIndex);
@@ -711,7 +870,7 @@ export default function App() {
 
       if (['1', '2', '3', '4'].includes(key)) {
         if (isEditable) return;
-        if (activeTab === 'translation' || activeTab === 'write-word' || activeTab === 'review') return;
+        if (activeTab === 'translation' || activeTab === 'write-word' || activeTab === 'review' || activeTab === 'writing-log') return;
         const idx = Number(key) - 1;
         const option = currentQuestion?.options?.[idx];
         if (!option) return;
@@ -787,11 +946,19 @@ export default function App() {
   }, []);
 
   const handlePrev = () => {
+    setPendingReviewRemoval(null);
+    setHoveredOption(null);
+    if (isPracticeTab && practiceSource === 'review') {
+      clearDisabledForTab(activeTab);
+    }
     // wrap backwards
-    if (activeTab === 'translation' || activeTab === 'write-word') {
-      const len = activeTab === 'translation'
-        ? (translationData && translationData.length) || 1
-        : (practiceDataList && practiceDataList.length) || 1;
+    if (activeTab === 'translation') {
+      refreshTranslationWords(translationWordCount);
+      updateTabState(activeTab, { input: '', checked: false, feedback: '' });
+      return;
+    }
+    if (activeTab === 'write-word') {
+      const len = (practiceDataList && practiceDataList.length) || 1;
       const newIndex = (quizState[activeTab].index - 1 + len) % len;
       updateTabState(activeTab, { index: newIndex, input: '', checked: false, feedback: '' });
       return;
@@ -802,7 +969,14 @@ export default function App() {
   };
 
   const handleReset = () => {
-    if (activeTab === 'translation' || activeTab === 'write-word') {
+    setPendingReviewRemoval(null);
+    if (activeTab === 'translation') {
+      refreshTranslationWords(translationWordCount);
+      updateTabState(activeTab, { input: '', checked: false, feedback: '', score: 0, answered: 0 });
+      setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
+      return;
+    }
+    if (activeTab === 'write-word') {
       updateTabState(activeTab, { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 });
       setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
       return;
@@ -833,8 +1007,13 @@ export default function App() {
     setReviewList([]);
   };
 
+  const handleClearWritingLog = () => {
+    setWritingLogList([]);
+  };
+
   const handleSwitchPracticeSource = (nextSource) => {
     if (nextSource === practiceSource) return;
+    setPendingReviewRemoval(null);
     setPracticeSource(nextSource);
     setSourceSlapActive(true);
     if (sourceSlapTimerRef.current) clearTimeout(sourceSlapTimerRef.current);
@@ -912,7 +1091,8 @@ export default function App() {
           mixed: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
           'write-word': { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 },
           translation: { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 },
-          review: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 }
+          review: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
+          'writing-log': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 }
         });
         setDisabledMap({});
         setSettingsOpen(false);
@@ -924,7 +1104,7 @@ export default function App() {
     }
   };
 
-  if (!currentQuestion && activeTab !== 'review') {
+  if (!currentQuestion && activeTab !== 'review' && activeTab !== 'writing-log') {
     return (
       <div className="app-shell">
         <main className="container">
@@ -1000,6 +1180,13 @@ export default function App() {
   const currentWordDetail = hoverDetail || currentQuestion?.detail || null;
   const canSaveCurrentWord = !!(currentWordDetail?.vocabulary || currentWordDetail?.vietnamMeaning);
   const reviewItems = [...(reviewList || [])].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
+  const writingLogItems = [...(writingLogList || [])].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
+  const activeGroupLabel = groupedTabs.find((t) => t.id === activeGroup)?.label || '';
+  const activeModeLabel = activeGroup === 'mcq'
+    ? (mcqModes.find((m) => m.id === mcqMode)?.label || '')
+    : activeGroup === 'writing'
+      ? (writingModes.find((m) => m.id === writingMode)?.label || '')
+      : (libraryModes.find((m) => m.id === libraryMode)?.label || '');
 
   return (
     <div className="app-shell">
@@ -1015,7 +1202,7 @@ export default function App() {
           <div className="score-board">
             <div className="score-item"><span>Điểm</span><strong>{currentTabState.score}</strong></div>
             <div className="score-item"><span>Đã làm</span><strong>{currentTabState.answered}</strong></div>
-            <div className="score-item"><span>Tab</span><strong>{tabs.find((t) => t.id === activeTab)?.label}</strong></div>
+            <div className="score-item"><span>Tab</span><strong>{activeModeLabel || activeGroupLabel}</strong></div>
             <div style={{ marginLeft: 12 }}><button className="ghost-button" onClick={() => setSettingsOpen((s) => !s)}>Settings</button></div>
           </div>
         </section>
@@ -1157,8 +1344,8 @@ export default function App() {
 
         <section className="tabs-section">
           <div className="tabs-list">
-            {tabs.map((tab) => (
-              <button key={tab.id} className={`tab-button ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>
+            {groupedTabs.map((tab) => (
+              <button key={tab.id} className={`tab-button ${activeGroup === tab.id ? 'active' : ''}`} onClick={() => setActiveGroup(tab.id)}>{tab.label}</button>
             ))}
           </div>
         </section>
@@ -1168,13 +1355,29 @@ export default function App() {
              <div className="card-header">
               <div>
                 <span className="chip">
-                  {activeTab === 'translation' ? 'Viết tự do' : activeTab === 'review' ? 'Review' : 'Multiple Choice'}
+                  {activeGroupLabel}
                 </span>
                 <h2>
-                  {activeTab === 'translation' ? 'Hiển thị câu và viết lại'
-                    : activeTab === 'review' ? `Review (${(reviewList || []).length})`
-                    : currentQuestion?.title}
+                  {activeTab === 'review' ? `Review (${(reviewList || []).length})`
+                    : activeTab === 'writing-log' ? `Writing Log (${(writingLogItems || []).length})`
+                    : activeModeLabel || currentQuestion?.title}
                 </h2>
+              </div>
+              <div className="mode-switch">
+                {(activeGroup === 'mcq' ? mcqModes : activeGroup === 'writing' ? writingModes : libraryModes).map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    className={`mode-pill ${activeTab === mode.id ? 'active' : ''}`}
+                    onClick={() => {
+                      if (activeGroup === 'mcq') setMcqMode(mode.id);
+                      else if (activeGroup === 'writing') setWritingMode(mode.id);
+                      else setLibraryMode(mode.id);
+                    }}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
               </div>
               {isPracticeTab && (
                 <button
@@ -1188,6 +1391,33 @@ export default function App() {
                   <span className="source-option rev">Rev</span>
                   <span className="source-knob" />
                 </button>
+              )}
+              {activeTab === 'translation' && (
+                <div className="translation-header-controls">
+                  <label htmlFor="translation-word-count" className="info-label" style={{ margin: 0 }}>Random</label>
+                  <input
+                    id="translation-word-count"
+                    type="number"
+                    min={1}
+                    max={50}
+                    step={1}
+                    value={translationWordCount}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') return;
+                      const parsed = Number.parseInt(raw, 10);
+                      if (Number.isNaN(parsed)) return;
+                      setTranslationWordCount(Math.max(1, Math.min(50, parsed)));
+                    }}
+                    onBlur={(e) => {
+                      const parsed = Number.parseInt(e.target.value, 10);
+                      const safe = Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(50, parsed));
+                      setTranslationWordCount(safe);
+                    }}
+                  />
+                  <button type="button" className="ghost-button" onClick={() => refreshTranslationWords(translationWordCount)}>Random</button>
+                </div>
               )}
              </div>
             {activeTab === 'review' ? (
@@ -1222,6 +1452,29 @@ export default function App() {
                   </div>
                 )}
               </div>
+            ) : activeTab === 'writing-log' ? (
+              <div className="review-panel">
+                <div className="actions" style={{ marginBottom: 12 }}>
+                  <button className="ghost-button" onClick={handleClearWritingLog} disabled={!writingLogItems.length}>Reset</button>
+                </div>
+                {writingLogItems.length ? (
+                  <div className="review-list">
+                    {writingLogItems.map((item) => (
+                      <div key={item.id || `${item.ts}`} className="review-item">
+                        <p><strong>Words:</strong> {(item.words || []).join(' | ') || '—'}</p>
+                        <p className="review-meta" style={{ whiteSpace: 'pre-wrap' }}><strong>Your Writing:</strong> {item.content || '—'}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="data-structure">
+                    <p style={{ margin: 0 }}>Writing log is empty.</p>
+                    <p style={{ marginTop: 6, fontSize: 13, color: '#666' }}>
+                      Ở tab Viết lại câu, chọn số lượng từ rồi bấm Confirm để lưu bài viết vào đây.
+                    </p>
+                  </div>
+                )}
+              </div>
             ) : (
               <>
                 <div
@@ -1243,22 +1496,44 @@ export default function App() {
 
                 {activeTab === 'translation' ? (
                   <div className="translation-area">
+                    <div className="data-structure translation-words-box" style={{ marginBottom: 10 }}>
+                      <span className="info-label">Từ gợi ý</span>
+                      {(translationWords || []).length ? (
+                        <div className="translation-words-list">
+                          {translationWords.map((word) => (
+                            <button
+                              key={word}
+                              type="button"
+                              className="translation-word-chip"
+                              onMouseEnter={() => setHoveredOption(word)}
+                              onFocus={() => setHoveredOption(word)}
+                              onTouchStart={() => setHoveredOption(word)}
+                              title="Hover để xem side card"
+                            >
+                              {word}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p>—</p>
+                      )}
+                    </div>
                     <textarea
                       value={currentTabState.input}
-                      onChange={(e) => updateTabState('translation', { input: e.target.value })}
+                      onChange={(e) => updateTabState('translation', { input: e.target.value, checked: false, feedback: '' })}
                       onKeyDown={(e) => {
-                        // Enter = submit (check) when non-empty
+                        // Enter = submit (confirm) when non-empty
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
                           if ((currentTabState.input || '').trim()) handleCheck();
                         }
-                        // Tab = next (move to next question)
+                        // Tab = random next set
                         if (e.key === 'Tab') {
                           e.preventDefault();
                           handleNext();
                         }
                       }}
-                      placeholder="Nhập câu trả lời của bạn ở đây..."
+                      placeholder="Dùng các từ gợi ý ở trên để viết câu/đoạn văn..."
                     />
                   </div>
                 ) : activeTab === 'write-word' ? (
@@ -1324,7 +1599,11 @@ export default function App() {
 
             <div className="actions">
                   <button className="secondary-button" onClick={handleNext}>Next →</button>
-                  <button className="ghost-button" onClick={handleReset}>Reset</button>
+                  {activeTab === 'translation' ? (
+                    <button className="primary-button" onClick={handleCheck}>Confirm</button>
+                  ) : (
+                    <button className="ghost-button" onClick={handleReset}>Reset</button>
+                  )}
                 </div>
 
                 <div className="data-structure learn-panel">
