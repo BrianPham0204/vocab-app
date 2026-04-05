@@ -1,6 +1,9 @@
 import React from 'react';
 
 export default function SideCard({ activeTab, hoverDetail, speak, onSaveCurrentWord, canSaveCurrentWord }) {
+  const collocation = hoverDetail?.collocation || '—';
+  const pattern = hoverDetail?.pattern || hoverDetail?.partern || '—';
+
   const renderWordDetail = () => (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -31,6 +34,8 @@ export default function SideCard({ activeTab, hoverDetail, speak, onSaveCurrentW
       <p><strong>Pronunciation:</strong> {hoverDetail?.pronun || '—'}</p>
       <p><strong>Word family:</strong> {hoverDetail?.wordFamily || '—'}</p>
       <p><strong>Synonym:</strong> {hoverDetail?.synonym || '—'}</p>
+      <p><strong>Collocation:</strong> {collocation}</p>
+      <p><strong>Pattern:</strong> {pattern}</p>
       <p><strong>Meaning:</strong> {hoverDetail?.vietnamMeaning || '—'}</p>
 
       <div style={{ marginTop: 8 }}>

@@ -28,6 +28,67 @@ const libraryModes = [
 ];
 const practiceTabs = ['en-to-vi', 'vi-to-en', 'mixed', 'write-word'];
 const DEFAULT_COUNTDOWN_SECONDS = 5 * 60;
+const SCHEMA_FIELDS = [
+  { key: 'vocabulary', label: 'Vocabulary', hint: 'Tu vung chinh' },
+  { key: 'type', label: 'Type', hint: 'Tu loai' },
+  { key: 'pronun', label: 'Pronunciation', hint: 'Phat am / phonetic' },
+  { key: 'vietnamMeaning', label: 'Meaning', hint: 'Nghia tieng Viet' },
+  { key: 'wordFamily', label: 'Word family', hint: 'Ho tu' },
+  { key: 'synonym', label: 'Synonym', hint: 'Dong nghia' },
+  { key: 'collocation', label: 'Collocation', hint: 'Cum tu di kem' },
+  { key: 'pattern', label: 'Pattern', hint: 'Cau truc / PARTERN' },
+  { key: 'sentences_en', label: 'Example EN', hint: 'Vi du tieng Anh' },
+  { key: 'sentences_vi', label: 'Example VI', hint: 'Vi du tieng Viet' },
+  { key: 'learn', label: 'Learn', hint: 'Ghi chu hoc tap' }
+];
+const MAPPING_SUGGESTERS = {
+  vocabulary: [/vocab|vocabulary/i],
+  type: [/type|pos|class/i],
+  pronun: [/pronun|pronounce|phonetic|pron/i],
+  vietnamMeaning: [/meaning|viet|vietnam/i],
+  wordFamily: [/word ?family|family/i],
+  synonym: [/synonym|syn/i],
+  collocation: [/collocation|collocate|collo/i],
+  pattern: [/pattern|partern|structure|form/i],
+  sentences_en: [/^example$/i, /sentence|example.*en|en_sentence|sentences_en/i],
+  sentences_vi: [/^translate$/i, /^translation$/i, /sentence.*vi|vi_sentence|sentences_vi|translate/i],
+  learn: [/learn/i]
+};
+
+const createHeaderFinder = (headers) => (candidates) => {
+  if (!headers || headers.length === 0) return '';
+
+  if (Array.isArray(candidates)) {
+    for (const candidate of candidates) {
+      const found = createHeaderFinder(headers)(candidate);
+      if (found) return found;
+    }
+    return '';
+  }
+
+  const re = typeof candidates === 'string' ? new RegExp(candidates, 'i') : candidates;
+  return headers.find((header) => re.test(header)) || '';
+};
+
+const resolveMappingForHeaders = (headers, previousMapping = {}) => {
+  const headerList = Array.isArray(headers) ? headers : [];
+  const findHeader = createHeaderFinder(headerList);
+  const hasHeader = (value) => headerList.some((header) => String(header).trim().toLowerCase() === String(value || '').trim().toLowerCase());
+
+  return {
+    vocabulary: hasHeader(previousMapping.vocabulary) ? previousMapping.vocabulary : (findHeader(MAPPING_SUGGESTERS.vocabulary) || headerList[0] || ''),
+    type: hasHeader(previousMapping.type) ? previousMapping.type : findHeader(MAPPING_SUGGESTERS.type),
+    pronun: hasHeader(previousMapping.pronun) ? previousMapping.pronun : findHeader(MAPPING_SUGGESTERS.pronun),
+    vietnamMeaning: hasHeader(previousMapping.vietnamMeaning) ? previousMapping.vietnamMeaning : findHeader(MAPPING_SUGGESTERS.vietnamMeaning),
+    wordFamily: hasHeader(previousMapping.wordFamily) ? previousMapping.wordFamily : findHeader(MAPPING_SUGGESTERS.wordFamily),
+    synonym: hasHeader(previousMapping.synonym) ? previousMapping.synonym : findHeader(MAPPING_SUGGESTERS.synonym),
+    collocation: hasHeader(previousMapping.collocation) ? previousMapping.collocation : findHeader(MAPPING_SUGGESTERS.collocation),
+    pattern: hasHeader(previousMapping.pattern) ? previousMapping.pattern : findHeader(MAPPING_SUGGESTERS.pattern),
+    sentences_en: hasHeader(previousMapping.sentences_en) ? previousMapping.sentences_en : findHeader(MAPPING_SUGGESTERS.sentences_en),
+    sentences_vi: hasHeader(previousMapping.sentences_vi) ? previousMapping.sentences_vi : findHeader(MAPPING_SUGGESTERS.sentences_vi),
+    learn: hasHeader(previousMapping.learn) ? previousMapping.learn : findHeader(MAPPING_SUGGESTERS.learn)
+  };
+};
 
 const parseCountdownInput = (rawValue) => {
   const value = String(rawValue || '').trim();
@@ -84,6 +145,8 @@ export default function App() {
     vietnamMeaning: '',
     wordFamily: '',
     synonym: '',
+    collocation: '',
+    pattern: '',
     sentences_en: '',
     sentences_vi: '',
     learn: ''
@@ -94,10 +157,10 @@ export default function App() {
   const [writingLogList, setWritingLogList] = useLocalStorage('vocab_writing_log', []);
 
   // UI state
-  const [activeGroup, setActiveGroup] = useState('mcq');
-  const [mcqMode, setMcqMode] = useState('en-to-vi');
-  const [writingMode, setWritingMode] = useState('write-word');
-  const [libraryMode, setLibraryMode] = useState('review');
+  const [activeGroup, setActiveGroup] = useLocalStorage('vocab_active_group', 'mcq');
+  const [mcqMode, setMcqMode] = useLocalStorage('vocab_mcq_mode', 'en-to-vi');
+  const [writingMode, setWritingMode] = useLocalStorage('vocab_writing_mode', 'write-word');
+  const [libraryMode, setLibraryMode] = useLocalStorage('vocab_library_mode', 'review');
   const [practiceSource, setPracticeSource] = useLocalStorage('vocab_practice_source', 'all');
   const [sheetHeaders, setSheetHeaders] = useState([]);
   const [sheetPreviewRows, setSheetPreviewRows] = useState([]);
@@ -151,6 +214,7 @@ export default function App() {
   const isPracticeTab = practiceTabs.includes(activeTab);
   // suppress hover immediately after question change (prevents remount-triggered onMouseEnter)
   const ignoreHoverUntilRef = useRef(0);
+  const mappingRef = useRef(mapping);
   const translateAbortRef = useRef(null);
   const translateCacheRef = useRef(new Map());
   const translatePopupRef = useRef(null);
@@ -184,19 +248,25 @@ export default function App() {
         return;
       }
 
-      byKey.set(key, {
-        vocabulary: word || meaning || '—',
-        vietnamMeaning: meaning || '',
-        type: '',
-        pronun: '',
-        wordFamily: '',
-        synonym: '',
-        sentences: { en: '', vi: '' },
-        learn: ''
-      });
+        byKey.set(key, {
+          vocabulary: word || meaning || '—',
+          vietnamMeaning: meaning || '',
+          type: '',
+          pronun: '',
+          wordFamily: '',
+          synonym: '',
+          collocation: '',
+          pattern: '',
+          sentences: { en: '', vi: '' },
+          learn: ''
+        });
     });
     return Array.from(byKey.values());
   }, [reviewList, dataList]);
+
+  useEffect(() => {
+    mappingRef.current = mapping;
+  }, [mapping]);
 
   const practiceDataList = useMemo(() => (
     practiceSource === 'review' ? reviewSourceData : (dataList || [])
@@ -325,31 +395,11 @@ export default function App() {
         const { headers, rows } = parseCSV(txt);
         setSheetHeaders(headers || []);
         setSheetPreviewRows((rows && rows.slice(0, 5)) || []);
-        // suggest reasonable defaults for all supported columns (case and position flexible)
-        const findHeader = (candidates) => {
-          if (!headers || headers.length === 0) return '';
-          if (Array.isArray(candidates)) {
-            for (const name of candidates) {
-              const h = headers.find((hh) => String(hh).trim().toLowerCase() === String(name).trim().toLowerCase());
-              if (h) return h;
-            }
-            return '';
-          }
-          const re = typeof candidates === 'string' ? new RegExp(candidates, 'i') : candidates;
-          return headers.find((h) => re.test(h)) || '';
-        };
-        setMapping((m) => ({
-          ...m,
-          vocabulary: m.vocabulary || headers[0] || findHeader(/vocab|vocabulary/i),
-          type: m.type || findHeader(/type|pos|class/i),
-          pronun: m.pronun || findHeader(/pronun|pronounce|phonetic|pron/i),
-          vietnamMeaning: m.vietnamMeaning || findHeader(/meaning|viet|vietnam/i),
-          wordFamily: m.wordFamily || findHeader(/word ?family|family/i),
-          synonym: m.synonym || findHeader(/synonym|syn/i),
-          sentences_en: m.sentences_en || findHeader(/sentence|example.*en|en_sentence|sentences_en/i),
-          sentences_vi: m.sentences_vi || findHeader(/sentence.*vi|vi_sentence|sentences_vi/i),
-          learn: m.learn || findHeader(/learn/i)
-        }));
+        setMapping((m) => {
+          const next = resolveMappingForHeaders(headers, m);
+          mappingRef.current = next;
+          return next;
+        });
       } catch (e) {
         console.error('Failed to fetch sheet preview:', e);
         setSheetHeaders([]);
@@ -401,6 +451,18 @@ export default function App() {
   const isMcqTab = mcqPracticeTabs.includes(activeTab);
   const activeOrderLength = (orders[activeTab] && orders[activeTab].length) || 0;
   const isMcqLibraryComplete = isMcqTab && activeOrderLength > 0 && activeIndex >= activeOrderLength;
+  const modeAvailability = useMemo(() => {
+    const list = Array.isArray(practiceDataList) ? practiceDataList : [];
+    const hasText = (value) => !!String(value || '').trim();
+
+    return {
+      total: list.length,
+      enToVi: list.filter((item) => hasText(item?.vocabulary) && hasText(item?.vietnamMeaning)).length,
+      viToEn: list.filter((item) => hasText(item?.vocabulary) && hasText(item?.vietnamMeaning)).length,
+      mixed: list.filter((item) => hasText(item?.vocabulary) && hasText(item?.sentences?.en)).length,
+      writeWord: list.filter((item) => hasText(item?.vocabulary) && hasText(item?.vietnamMeaning)).length
+    };
+  }, [practiceDataList]);
   const learnedCount = isMcqTab
     ? Math.min(activeIndex + (currentTabState?.checked ? 1 : 0), activeOrderLength)
     : 0;
@@ -634,11 +696,19 @@ export default function App() {
     e.preventDefault();
     const hdr = e.dataTransfer.getData('text/plain') || draggingHeader;
     if (!hdr) return;
-    setMapping((m) => ({ ...m, [field]: hdr }));
+    setMapping((m) => {
+      const next = { ...m, [field]: hdr };
+      mappingRef.current = next;
+      return next;
+    });
     setDraggingHeader(null);
     setDropHover(null);
   };
-  const clearMappingField = (field) => setMapping((m) => ({ ...m, [field]: '' }));
+  const clearMappingField = (field) => setMapping((m) => {
+    const next = { ...m, [field]: '' };
+    mappingRef.current = next;
+    return next;
+  });
 
   // speak helper using Web Speech API
   const speak = (text, lang = 'en-US') => {
@@ -1249,34 +1319,11 @@ export default function App() {
       const { headers, rows } = parseCSV(txt);
       setSheetHeaders(headers);
       setSheetPreviewRows(rows.slice(0, 5));
-      // suggest reasonable defaults for all supported columns (case and position flexible)
-      const findHeader = (candidates) => {
-        if (!headers || headers.length === 0) return '';
-        // candidates can be a regex or array of names (case-insensitive)
-        if (Array.isArray(candidates)) {
-          for (const name of candidates) {
-            const h = headers.find((hh) => String(hh).trim().toLowerCase() === String(name).trim().toLowerCase());
-            if (h) return h;
-          }
-          return '';
-        }
-        // regex
-        const re = typeof candidates === 'string' ? new RegExp(candidates, 'i') : candidates;
-        return headers.find((h) => re.test(h)) || '';
-      };
-
-      setMapping((m) => ({
-        ...m,
-        vocabulary: m.vocabulary || headers[0] || findHeader(/vocab|vocabulary/i),
-        type: m.type || findHeader(/type|pos|class/i),
-        pronun: m.pronun || findHeader(/pronun|pronounce|phonetic|pron/i),
-        vietnamMeaning: m.vietnamMeaning || findHeader(/meaning|viet|vietnam/i),
-        wordFamily: m.wordFamily || findHeader(/word ?family|family/i),
-        synonym: m.synonym || findHeader(/synonym|syn/i),
-        sentences_en: m.sentences_en || findHeader(/sentence|example.*en|en_sentence|sentences_en/i),
-        sentences_vi: m.sentences_vi || findHeader(/sentence.*vi|vi_sentence|sentences_vi/i),
-        learn: m.learn || findHeader(/learn/i)
-      }));
+      setMapping((m) => {
+        const next = resolveMappingForHeaders(headers, m);
+        mappingRef.current = next;
+        return next;
+      });
     } catch (e) {
       console.error('Failed to fetch sheet preview:', e);
       setSheetHeaders([]);
@@ -1290,7 +1337,20 @@ export default function App() {
     try {
       const txt = await fetchCsvAsText(csvUrl);
       const { rows } = parseCSV(txt);
-      const mapped = mapSheetRowsToData(rows, mapping);
+      const latestMapping = mappingRef.current || mapping;
+      const mapped = mapSheetRowsToData(rows, latestMapping);
+      const hasText = (value) => !!String(value || '').trim();
+      const diagnostics = {
+        totalMappedRows: mapped.length,
+        withVocabulary: mapped.filter((item) => hasText(item?.vocabulary)).length,
+        withMeaning: mapped.filter((item) => hasText(item?.vietnamMeaning)).length,
+        withSentenceEn: mapped.filter((item) => hasText(item?.sentences?.en)).length,
+        withSentenceVi: mapped.filter((item) => hasText(item?.sentences?.vi)).length,
+        withLearn: mapped.filter((item) => hasText(item?.learn)).length,
+        validEnToVi: mapped.filter((item) => hasText(item?.vocabulary) && hasText(item?.vietnamMeaning)).length,
+        validMixed: mapped.filter((item) => hasText(item?.vocabulary) && hasText(item?.sentences?.en)).length
+      };
+      console.table(diagnostics);
       if (mapped.length) {
         setDataList(mapped);
         setQuizState({
@@ -1311,27 +1371,6 @@ export default function App() {
       console.error('Apply mapping failed:', e);
     }
   };
-
-  if (!currentQuestion && !isMcqLibraryComplete && activeTab !== 'review' && activeTab !== 'writing-log') {
-    return (
-      <div className="app-shell">
-        <main className="container">
-          <section style={{ padding: 24 }}>
-            <h2>No question available</h2>
-            <p>
-              Data source: <strong>{isPracticeTab ? (practiceSource === 'review' ? 'Review Data' : 'Original Data') : 'Default'}</strong>.
-              {' '}Available words: {isPracticeTab ? (practiceDataList?.length || 0) : (dataList?.length || 0)}.
-            </p>
-            {isPracticeTab && practiceSource === 'review' ? (
-              <p>Hãy lưu từ sai hoặc bấm Save để thêm từ vào Review trước khi luyện theo nguồn Review.</p>
-            ) : (
-              <p>Use Settings to load a sheet or check mapping.</p>
-            )}
-          </section>
-        </main>
-      </div>
-    );
-  }
 
   const indexKey = quizState[activeTab].index;
   const tabDisabledEntry = (disabledMap[activeTab] || {})[indexKey] || { disabledOptions: [], lockAll: false };
@@ -1395,6 +1434,18 @@ export default function App() {
     : activeGroup === 'writing'
       ? (writingModes.find((m) => m.id === writingMode)?.label || '')
       : (libraryModes.find((m) => m.id === libraryMode)?.label || '');
+  const sampleRow = sheetPreviewRows && sheetPreviewRows.length ? sheetPreviewRows[0] : null;
+  const resolveHeaderKey = (target) => {
+    if (!target || !sheetHeaders || !sheetHeaders.length) return null;
+    const t = String(target).trim().toLowerCase();
+    let k = sheetHeaders.find((hh) => String(hh).trim().toLowerCase() === t);
+    if (k) return k;
+    k = sheetHeaders.find((hh) => {
+      const hnorm = String(hh).trim().toLowerCase();
+      return hnorm.includes(t) || t.includes(hnorm);
+    });
+    return k || null;
+  };
 
   return (
     <div className="app-shell">
@@ -1479,22 +1530,52 @@ export default function App() {
               </div>
 
               <div style={{ flex: 1 }}>
-                <h4>Map headers to schema (drop header onto a slot)</h4>
-                {['vocabulary','type','pronun','vietnamMeaning','wordFamily','synonym','sentences_en','sentences_vi','learn'].map((field) => (
-                   <div key={field} onDragOver={(e) => handleDragOverSlot(e, field)} onDragLeave={handleDragLeaveSlot} onDrop={(e) => handleDropToField(e, field)} className={`mapping-slot ${dropHover === field ? 'hover' : ''}`}>
-                     <label>{field}</label>
-                     <div className="mapping-value">
-                       {mapping[field]
-                         ? <>
-                             <span className="mapped-name">{mapping[field]}</span>
-                             <button type="button" className="clear-mapping" onClick={() => clearMappingField(field)} title="Clear mapping">✕</button>
-                             <span className="connected-badge" title="Mapped">✓</span>
-                           </>
-                         : <em>drop header here</em>
-                       }
-                     </div>
-                   </div>
-                 ))}
+                <div className="mapping-header-row">
+                  <div>
+                    <h4>Map headers to schema</h4>
+                    <p className="mapping-helper-text">Keo header vao tung o. Moi field se hien header dang map va sample preview.</p>
+                  </div>
+                </div>
+                <div className="mapping-grid">
+                  {SCHEMA_FIELDS.map((field) => {
+                    const mappedHeader = mapping[field.key] || '';
+                    const resolvedKey = mappedHeader ? resolveHeaderKey(mappedHeader) : null;
+                    const sample = sampleRow && resolvedKey ? (sampleRow[resolvedKey] ?? '—') : '—';
+                    return (
+                      <div
+                        key={field.key}
+                        onDragOver={(e) => handleDragOverSlot(e, field.key)}
+                        onDragLeave={handleDragLeaveSlot}
+                        onDrop={(e) => handleDropToField(e, field.key)}
+                        className={`mapping-slot mapping-card ${dropHover === field.key ? 'hover' : ''} ${mappedHeader ? 'mapped' : ''}`}
+                      >
+                        <div className="mapping-card-top">
+                          <div>
+                            <label>{field.label}</label>
+                            <div className="mapping-field-hint">{field.hint}</div>
+                          </div>
+                          {mappedHeader ? <span className="connected-badge" title="Mapped">✓</span> : null}
+                        </div>
+
+                        <div className="mapping-value">
+                          {mappedHeader ? (
+                            <>
+                              <span className="mapped-name">{resolvedKey || mappedHeader}</span>
+                              <button type="button" className="clear-mapping" onClick={() => clearMappingField(field.key)} title="Clear mapping">✕</button>
+                            </>
+                          ) : (
+                            <em>drop header here</em>
+                          )}
+                        </div>
+
+                        <div className="mapping-sample">
+                          <span>Sample</span>
+                          <strong>{String(sample || '—')}</strong>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -1523,43 +1604,27 @@ export default function App() {
             {/* Mapping test: show mapped header + sample preview value for each schema field */}
             <div style={{ marginTop: 12, padding: 8, borderTop: '1px solid #eee' }}>
               <h4>Mapping test (preview row sample)</h4>
-              {sheetHeaders && sheetHeaders.length ? (() => {
-                const findHeaderKey = (target) => {
-                  if (!target) return null;
-                  const t = String(target).trim().toLowerCase();
-                  let k = sheetHeaders.find((hh) => String(hh).trim().toLowerCase() === t);
-                  if (k) return k;
-                  k = sheetHeaders.find((hh) => {
-                    const hnorm = String(hh).trim().toLowerCase();
-                    return hnorm.includes(t) || t.includes(hnorm);
-                  });
-                  return k || null;
-                };
-
-                const sampleRow = sheetPreviewRows && sheetPreviewRows.length ? sheetPreviewRows[0] : null;
-                const fields = ['vocabulary','type','pronun','vietnamMeaning','wordFamily','synonym','sentences_en','sentences_vi','learn'];
-                return (
-                  <table style={{ width: '100%', fontSize: 13, marginTop: 8 }}>
-                    <thead>
-                      <tr><th style={{ textAlign: 'left' }}>Field</th><th style={{ textAlign: 'left' }}>Mapped header</th><th style={{ textAlign: 'left' }}>Preview sample</th></tr>
-                    </thead>
-                    <tbody>
-                      {fields.map((f) => {
-                        const hdr = mapping[f] || '';
-                        const resolvedKey = hdr ? findHeaderKey(hdr) : null;
-                        const sample = sampleRow && resolvedKey ? (sampleRow[resolvedKey] ?? '—') : '—';
-                        return (
-                          <tr key={f}>
-                            <td style={{ padding: '6px 8px', verticalAlign: 'top' }}>{f}</td>
-                            <td style={{ padding: '6px 8px', verticalAlign: 'top', color: resolvedKey ? '#000' : '#b00' }}>{resolvedKey || hdr || <em>none</em>}</td>
-                            <td style={{ padding: '6px 8px', verticalAlign: 'top' }}>{String(sample)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                );
-              })() : <em>No headers to test</em>}
+              {sheetHeaders && sheetHeaders.length ? (
+                <table style={{ width: '100%', fontSize: 13, marginTop: 8 }}>
+                  <thead>
+                    <tr><th style={{ textAlign: 'left' }}>Field</th><th style={{ textAlign: 'left' }}>Mapped header</th><th style={{ textAlign: 'left' }}>Preview sample</th></tr>
+                  </thead>
+                  <tbody>
+                    {SCHEMA_FIELDS.map((field) => {
+                      const hdr = mapping[field.key] || '';
+                      const resolvedKey = hdr ? resolveHeaderKey(hdr) : null;
+                      const sample = sampleRow && resolvedKey ? (sampleRow[resolvedKey] ?? '—') : '—';
+                      return (
+                        <tr key={field.key}>
+                          <td style={{ padding: '6px 8px', verticalAlign: 'top' }}>{field.label}</td>
+                          <td style={{ padding: '6px 8px', verticalAlign: 'top', color: resolvedKey ? '#000' : '#b00' }}>{resolvedKey || hdr || <em>none</em>}</td>
+                          <td style={{ padding: '6px 8px', verticalAlign: 'top' }}>{String(sample)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : <em>No headers to test</em>}
             </div>
 
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' }}>
@@ -1736,6 +1801,30 @@ export default function App() {
                 <div className="actions">
                   <button className="primary-button" onClick={handleResetLibrary}>Reset Library</button>
                 </div>
+              </div>
+            ) : !currentQuestion ? (
+              <div className="data-structure">
+                <p style={{ margin: 0 }}><strong>No question available for this mode.</strong></p>
+                <p style={{ marginTop: 8 }}>
+                  Data source: <strong>{isPracticeTab ? (practiceSource === 'review' ? 'Review Data' : 'Original Data') : 'Default'}</strong>.
+                  {' '}Available words: {isPracticeTab ? (practiceDataList?.length || 0) : (dataList?.length || 0)}.
+                </p>
+                <p style={{ marginTop: 8, fontSize: 14, color: '#557261' }}>
+                  Valid rows:
+                  {' '}EN → VN <strong>{modeAvailability.enToVi}</strong>,
+                  {' '}VN → EN <strong>{modeAvailability.viToEn}</strong>,
+                  {' '}Cloze <strong>{modeAvailability.mixed}</strong>,
+                  {' '}Viết lại từ <strong>{modeAvailability.writeWord}</strong>.
+                </p>
+                {isPracticeTab && practiceSource === 'review' ? (
+                  <p style={{ marginTop: 8 }}>
+                    Hãy lưu từ sai hoặc bấm Save để thêm từ vào Review, hoặc chuyển lại nguồn `Org`.
+                  </p>
+                ) : (
+                  <p style={{ marginTop: 8 }}>
+                    Mode hiện tại chưa có đủ dữ liệu để tạo câu hỏi. Bạn vẫn có thể chuyển sang mode khác như `EN → VN`, `VN → EN`, `Cloze`, hoặc `Viết lại từ`.
+                  </p>
+                )}
               </div>
             ) : (
               <>

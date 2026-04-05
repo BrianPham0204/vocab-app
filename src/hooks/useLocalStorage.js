@@ -12,9 +12,11 @@ export function useLocalStorage(key, initialValue) {
 
   const setValue = (v) => {
     try {
-      const valueToStore = typeof v === 'function' ? v(state) : v;
-      setState(valueToStore);
-      localStorage.setItem(key, JSON.stringify(valueToStore));
+      setState((prev) => {
+        const valueToStore = typeof v === 'function' ? v(prev) : v;
+        localStorage.setItem(key, JSON.stringify(valueToStore));
+        return valueToStore;
+      });
     } catch (e) {
       console.error('useLocalStorage set error', e);
     }

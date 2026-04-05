@@ -74,7 +74,7 @@ export function parseCSV(csvText) {
 }
 
 export function mapSheetRowsToData(rows, mapping) {
-  // mapping: { vocabulary, type, pronun, vietnamMeaning, wordFamily, synonym, sentences_en, sentences_vi, learn }
+  // mapping: { vocabulary, type, pronun, vietnamMeaning, wordFamily, synonym, collocation, pattern, sentences_en, sentences_vi, learn }
   // normalize rows: since CSV headers can vary in case/spacing, attempt to resolve mapping keys safely
 
   const normalizeKey = (k = '') => String(k || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/[^a-z0-9\s]/gi, '');
@@ -105,6 +105,8 @@ export function mapSheetRowsToData(rows, mapping) {
     const vietnamMeaning = resolve(r, mapping.vietnamMeaning);
     const wordFamily = resolve(r, mapping.wordFamily);
     const synonym = resolve(r, mapping.synonym);
+    const collocation = resolve(r, mapping.collocation);
+    const pattern = resolve(r, mapping.pattern || mapping.partern);
     const sentences_en = resolve(r, mapping.sentences_en);
     const sentences_vi = resolve(r, mapping.sentences_vi);
     return {
@@ -114,6 +116,8 @@ export function mapSheetRowsToData(rows, mapping) {
       learn: String(learn || '').trim(),
       wordFamily: String(wordFamily || '').trim(),
       synonym: String(synonym || '').trim(),
+      collocation: String(collocation || '').trim(),
+      pattern: String(pattern || '').trim(),
       vietnamMeaning: String(vietnamMeaning || '').trim(),
       sentences: { en: String(sentences_en || '').trim(), vi: String(sentences_vi || '').trim() }
     };

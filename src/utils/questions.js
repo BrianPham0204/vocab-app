@@ -54,34 +54,62 @@ function pickDistractors(arr, field, count = 3, seed) {
   return seededShuffle(unique, seed).slice(0, count);
 }
 
+function hasText(value) {
+  return !!String(value || '').trim();
+}
+
+function findNextValidItem(data, startIndex, predicate) {
+  if (!data || data.length === 0) return { item: null, index: -1 };
+  const safeStart = ((startIndex % data.length) + data.length) % data.length;
+
+  for (let offset = 0; offset < data.length; offset += 1) {
+    const candidateIndex = (safeStart + offset) % data.length;
+    const candidate = data[candidateIndex];
+    if (predicate(candidate)) {
+      return { item: candidate, index: candidateIndex };
+    }
+  }
+
+  return { item: null, index: -1 };
+}
+
 export function buildChoiceQuestion(data, mode, index) {
   if (!data || data.length === 0) return null;
   const idx = index % data.length;
-  let item = data[idx];
+  let item = null;
   let actualIdx = idx;
-  let others = data.filter((_, i) => i !== actualIdx);
-  if (!item) return null;
+  let others = [];
+
+  const assignResolvedItem = (resolved) => {
+    item = resolved.item;
+    actualIdx = resolved.index;
+    others = data.filter((_, i) => i !== actualIdx);
+  };
 
   if (mode === 'en-to-vi') {
-    if (!item.vietnamMeaning || !String(item.vietnamMeaning).trim()) return null;
-    const seed = `en-to-vi-${idx}-${item.vocabulary}`;
+    const resolved = findNextValidItem(data, idx, (candidate) => hasText(candidate?.vocabulary) && hasText(candidate?.vietnamMeaning));
+    if (!resolved.item) return null;
+    assignResolvedItem(resolved);
+    const seed = `en-to-vi-${actualIdx}-${item.vocabulary}`;
     const distractors = pickDistractors(others, 'vietnamMeaning', 3, seed + '-d');
     const optsRaw = [String(item.vietnamMeaning).trim(), ...distractors];
     const optsUniq = Array.from(new Set(optsRaw.filter((o) => o && String(o).trim())));
     if (!optsUniq.includes(String(item.vietnamMeaning).trim())) optsUniq.unshift(String(item.vietnamMeaning).trim());
     const options = randomShuffle(optsUniq).slice(0, 4);
-    return { id: `${mode}-${idx}`, title: 'Chọn nghĩa đúng', prompt: item.vocabulary, answer: item.vietnamMeaning, options, detail: item, index: idx };
+    return { id: `${mode}-${actualIdx}`, title: 'Chọn nghĩa đúng', prompt: item.vocabulary, answer: item.vietnamMeaning, options, detail: item, index: actualIdx };
   }
 
   if (mode === 'vi-to-en') {
-    if (!item.vocabulary || !String(item.vocabulary).trim()) return null;
-    const seed = `vi-to-en-${idx}-${item.vocabulary}`;
+    const resolved = findNextValidItem(data, idx, (candidate) => hasText(candidate?.vocabulary) && hasText(candidate?.vietnamMeaning));
+    if (!resolved.item) return null;
+    assignResolvedItem(resolved);
+    const seed = `vi-to-en-${actualIdx}-${item.vocabulary}`;
     const distractors = pickDistractors(others, 'vocabulary', 3, seed + '-d');
     const optsRaw = [String(item.vocabulary).trim(), ...distractors];
     const optsUniq = Array.from(new Set(optsRaw.filter((o) => o && String(o).trim())));
     if (!optsUniq.includes(String(item.vocabulary).trim())) optsUniq.unshift(String(item.vocabulary).trim());
     const options = randomShuffle(optsUniq).slice(0, 4);
-    return { id: `${mode}-${idx}`, title: 'Chọn từ tiếng Anh đúng', prompt: item.vietnamMeaning, answer: item.vocabulary, options, detail: item, index: idx };
+    return { id: `${mode}-${actualIdx}`, title: 'Chọn từ tiếng Anh đúng', prompt: item.vietnamMeaning, answer: item.vocabulary, options, detail: item, index: actualIdx };
   }
 
   if (mode === 'mixed') {
@@ -201,13 +229,15 @@ export function buildChoiceQuestion(data, mode, index) {
     };
   }
 
-  if (!item.vietnamMeaning || !String(item.vietnamMeaning).trim()) return null;
-  const seed = `fallback-${idx}-${item.vocabulary}`;
+  const resolved = findNextValidItem(data, idx, (candidate) => hasText(candidate?.vocabulary) && hasText(candidate?.vietnamMeaning));
+  if (!resolved.item) return null;
+  assignResolvedItem(resolved);
+  const seed = `fallback-${actualIdx}-${item.vocabulary}`;
   const distractors = pickDistractors(others, 'vietnamMeaning', 3, seed + '-d');
   const optsRaw = [String(item.vietnamMeaning).trim(), ...distractors];
   const optsUniq = Array.from(new Set(optsRaw.filter((o) => o && String(o).trim())));
   const options = randomShuffle(optsUniq).slice(0, 4);
-  return { id: `${mode}-${idx}`, title: 'Trắc nghiệm', prompt: `Từ: ${item.vocabulary}`, answer: item.vietnamMeaning, options, detail: item, index: idx };
+  return { id: `${mode}-${actualIdx}`, title: 'Trắc nghiệm', prompt: `Từ: ${item.vocabulary}`, answer: item.vietnamMeaning, options, detail: item, index: actualIdx };
 }
 
 export function buildTranslationQuestion(index, translationData) {
@@ -217,9 +247,16 @@ export function buildTranslationQuestion(index, translationData) {
 export function buildWriteWordQuestion(data, index) {
   if (!data || data.length === 0) return null;
   const idx = index % data.length;
-  const item = data[idx];
-  if (!item) return null;
-  if (!item.vocabulary || !item.vietnamMeaning) return null;
-  return { id: `write-word-${idx}`, title: 'Viết lại từ', prompt: item.vietnamMeaning, answer: item.vocabulary, options: [], detail: item, index: idx };
+  const resolved = findNextValidItem(data, idx, (candidate) => hasText(candidate?.vocabulary) && hasText(candidate?.vietnamMeaning));
+  if (!resolved.item) return null;
+  return {
+    id: `write-word-${resolved.index}`,
+    title: 'Viết lại từ',
+    prompt: resolved.item.vietnamMeaning,
+    answer: resolved.item.vocabulary,
+    options: [],
+    detail: resolved.item,
+    index: resolved.index
+  };
 }
 // ...end file...
