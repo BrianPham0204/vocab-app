@@ -34,10 +34,10 @@ input {
 .settings-panel {
   background: rgba(255, 255, 255, 0.84);
   border: 1px solid rgba(136, 192, 154, 0.35);
-  box-shadow: 0 18px 40px rgba(50, 91, 66, 0.08);
+  box-shadow: 0 14px 28px rgba(50, 91, 66, 0.07);
   backdrop-filter: blur(12px);
-  border-radius: 24px;
-  padding: 24px;
+  border-radius: 20px;
+  padding: 20px;
 }
 
 .background-blur {
@@ -73,11 +73,11 @@ input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 10px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #f7fcf8 0%, #eff9f2 100%);
-  border: 1px solid #d8ecdd;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  background: rgba(247, 252, 248, 0.78);
+  border: 1px solid rgba(216, 236, 221, 0.95);
   min-width: 0;
 }
 
@@ -95,17 +95,17 @@ input {
 }
 
 .clock-icon {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
 }
 
 .countdown-display {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 800;
   line-height: 1;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: #173327;
-  min-width: 64px;
+  min-width: 58px;
 }
 
 .countdown-display.is-finished {
@@ -114,8 +114,8 @@ input {
 
 .countdown-controls {
   display: grid;
-  grid-template-columns: minmax(88px, 1fr) repeat(2, minmax(64px, auto));
-  gap: 6px;
+  grid-template-columns: minmax(78px, 1fr) repeat(2, minmax(58px, auto));
+  gap: 5px;
   width: 100%;
   min-width: 0;
 }
@@ -123,9 +123,9 @@ input {
 .countdown-input {
   width: 100%;
   border: 1px solid #d7eadc;
-  border-radius: 12px;
-  padding: 7px 10px;
-  background: #f7fcf8;
+  border-radius: 10px;
+  padding: 6px 9px;
+  background: rgba(255, 255, 255, 0.86);
   color: #284837;
   outline: none;
 }
@@ -137,11 +137,11 @@ input {
 
 .countdown-button {
   border: none;
-  border-radius: 12px;
-  padding: 7px 8px;
+  border-radius: 10px;
+  padding: 6px 8px;
   background: #e7f7ec;
   color: #27563b;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   font-weight: 700;
   cursor: pointer;
 }
@@ -168,28 +168,28 @@ input {
 .tabs-section {
   background: rgba(255, 255, 255, 0.84);
   border: 1px solid rgba(136, 192, 154, 0.35);
-  box-shadow: 0 18px 40px rgba(50, 91, 66, 0.08);
+  box-shadow: 0 14px 30px rgba(50, 91, 66, 0.07);
   backdrop-filter: blur(12px);
 }
 
 .hero-card {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
-  gap: 20px;
-  padding: 28px;
-  border-radius: 28px;
-  margin-bottom: 20px;
+  gap: 16px;
+  padding: 20px 22px;
+  border-radius: 22px;
+  margin-bottom: 16px;
 }
 
 .eyebrow {
   display: inline-block;
-  padding: 6px 12px;
+  padding: 5px 10px;
   border-radius: 999px;
   background: #dff5e6;
   color: #2d7a4a;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .hero-card h1,
@@ -200,68 +200,47 @@ input {
 }
 
 .hero-card h1 {
-  font-size: clamp(1.8rem, 2vw, 2.6rem);
-  line-height: 1.15;
-  margin-bottom: 10px;
+  font-size: clamp(1.55rem, 1.8vw, 2.2rem);
+  line-height: 1.12;
+  margin-bottom: 8px;
 }
 
 .hero-card p {
   margin: 0;
   color: #456554;
-  max-width: 700px;
+  max-width: 640px;
+  font-size: 0.94rem;
 }
 
 .score-board {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
+  grid-template-columns: 1fr;
+  gap: 8px;
   align-self: stretch;
 }
 
 .top-tools-row {
-  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: 1fr 4fr;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .settings-top-button {
   width: 100%;
-  padding: 9px 12px;
-}
-
-.score-item {
-  padding: 18px;
-  border-radius: 22px;
-  background: linear-gradient(180deg, #f3fcf5 0%, #e7f8eb 100%);
-  border: 1px solid #d3edd9;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-}
-
-.score-item span {
-  font-size: 0.9rem;
-  color: #517663;
-}
-
-.score-item strong {
-  font-size: 1.1rem;
-  color: #1f4d33;
+  padding: 8px 12px;
 }
 
 .tabs-section {
-  padding: 12px;
-  border-radius: 24px;
-  margin-bottom: 20px;
+  padding: 10px;
+  border-radius: 20px;
+  margin-bottom: 16px;
 }
 
 .tabs-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .source-switch.slap {
@@ -335,11 +314,12 @@ input {
 .tab-button {
   border: none;
   border-radius: 999px;
-  padding: 12px 18px;
+  padding: 9px 14px;
   background: #edf6ef;
   color: #42604f;
   cursor: pointer;
   transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
+  font-size: 0.9rem;
 }
 
 .tab-button:hover {
@@ -354,14 +334,14 @@ input {
 .practice-grid {
   display: grid;
   grid-template-columns: minmax(0, 6fr) minmax(0, 4fr);
-  gap: 20px;
+  gap: 16px;
   align-items: start;
 }
 
 .question-card,
 .side-card {
-  padding: 24px;
-  border-radius: 28px;
+  padding: 20px;
+  border-radius: 22px;
 }
 
 .card-header {
@@ -369,7 +349,65 @@ input {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
+}
+
+.focus-range-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: rgba(247, 252, 248, 0.8);
+  border: 1px solid rgba(220, 236, 223, 0.95);
+}
+
+.hero-focus-range-bar {
+  width: 100%;
+}
+
+.focus-range-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.focus-range-field {
+  display: grid;
+  gap: 4px;
+  min-width: 84px;
+}
+
+.focus-range-field span {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6d8b79;
+}
+
+.focus-range-field input {
+  width: 100%;
+  border: 1px solid #d7eadc;
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #284837;
+  outline: none;
+}
+
+.focus-range-field input:focus {
+  border-color: #73bf8a;
+  box-shadow: 0 0 0 4px rgba(115, 191, 138, 0.12);
+}
+
+.focus-range-reset {
+  min-width: 60px;
+  padding: 8px 12px;
 }
 
 .translation-header-controls {
@@ -396,8 +434,8 @@ input {
   background: #f7fcf8;
   color: #42604f;
   border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 0.82rem;
+  padding: 5px 10px;
+  font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
 }
@@ -1027,6 +1065,20 @@ input {
   .card-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .focus-range-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .focus-range-controls {
+    justify-content: stretch;
+  }
+
+  .focus-range-field {
+    flex: 1;
+    min-width: 0;
   }
 
   .source-switch.slap {

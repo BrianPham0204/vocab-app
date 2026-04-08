@@ -135,6 +135,24 @@ const buildRandomOrderIndexes = (count) => {
   return arr;
 };
 
+const clampPositiveInteger = (value) => {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  if (Number.isNaN(parsed) || parsed <= 0) return null;
+  return parsed;
+};
+
+const resolveWordOrder = (item, fallbackIndex) => {
+  const explicitOrder = clampPositiveInteger(item?.order ?? item?.stt ?? item?._rowNumber);
+  return explicitOrder || (fallbackIndex + 1);
+};
+
+const attachWordOrder = (list) => (
+  (Array.isArray(list) ? list : []).map((item, index) => ({
+    ...item,
+    _rowNumber: resolveWordOrder(item, index)
+  }))
+);
+
 export default function App() {
   // persisted settings and data
   const [sheetUrl, setSheetUrl] = useLocalStorage('vocab_sheet_url', '');
@@ -152,6 +170,7 @@ export default function App() {
     learn: ''
   });
   const [dataList, setDataList] = useLocalStorage('vocab_data', localVocabularyData || []);
+  const [wordRange, setWordRange] = useLocalStorage('vocab_word_range', { start: '', end: '' });
   // review list (wrong answers)
   const [reviewList, setReviewList] = useLocalStorage('vocab_review', []);
   const [writingLogList, setWritingLogList] = useLocalStorage('vocab_writing_log', []);
@@ -206,6 +225,18 @@ export default function App() {
   const [countdownSeconds, setCountdownSeconds] = useState(DEFAULT_COUNTDOWN_SECONDS);
   const [isCountdownRunning, setIsCountdownRunning] = useState(false);
   const [showTimeUpNotice, setShowTimeUpNotice] = useState(false);
+  const normalizedDataList = useMemo(() => attachWordOrder(dataList), [dataList]);
+  const rawRangeStart = clampPositiveInteger(wordRange?.start);
+  const rawRangeEnd = clampPositiveInteger(wordRange?.end);
+  const hasWordRange = rawRangeStart !== null || rawRangeEnd !== null;
+  const rangeStart = rawRangeStart !== null && rawRangeEnd !== null
+    ? Math.min(rawRangeStart, rawRangeEnd)
+    : rawRangeStart;
+  const rangeEnd = rawRangeStart !== null && rawRangeEnd !== null
+    ? Math.max(rawRangeStart, rawRangeEnd)
+    : rawRangeEnd;
+  const effectiveRangeStart = rangeStart ?? 1;
+  const effectiveRangeEnd = rangeEnd ?? Number.MAX_SAFE_INTEGER;
   const activeTab = useMemo(() => {
     if (activeGroup === 'mcq') return mcqMode;
     if (activeGroup === 'writing') return writingMode;
@@ -222,6 +253,7 @@ export default function App() {
   const sourceSlapTimerRef = useRef(null);
   const countdownTimerRef = useRef(null);
   const timeUpNoticeTimerRef = useRef(null);
+  const lastAppliedRangeRef = useRef('');
   
   const reviewSourceData = useMemo(() => {
     const list = Array.isArray(reviewList) ? reviewList : [];
@@ -238,7 +270,7 @@ export default function App() {
         return;
       }
 
-      const matched = (dataList || []).find((it) => {
+      const matched = normalizedDataList.find((it) => {
         const vocab = normalizeText(it?.vocabulary || '');
         const viet = normalizeText(it?.vietnamMeaning || '');
         return vocab === key || viet === key;
@@ -251,6 +283,7 @@ export default function App() {
         byKey.set(key, {
           vocabulary: word || meaning || '—',
           vietnamMeaning: meaning || '',
+          _rowNumber: null,
           type: '',
           pronun: '',
           wordFamily: '',
@@ -262,15 +295,30 @@ export default function App() {
         });
     });
     return Array.from(byKey.values());
-  }, [reviewList, dataList]);
+  }, [reviewList, normalizedDataList]);
 
   useEffect(() => {
     mappingRef.current = mapping;
   }, [mapping]);
 
+  const filteredVocabularyData = useMemo(() => (
+    normalizedDataList.filter((item) => {
+      const rowNumber = resolveWordOrder(item, 0);
+      return rowNumber >= effectiveRangeStart && rowNumber <= effectiveRangeEnd;
+    })
+  ), [normalizedDataList, effectiveRangeStart, effectiveRangeEnd]);
+
+  const filteredReviewData = useMemo(() => (
+    reviewSourceData.filter((item) => {
+      const rowNumber = clampPositiveInteger(item?._rowNumber);
+      if (rowNumber === null) return !hasWordRange;
+      return rowNumber >= effectiveRangeStart && rowNumber <= effectiveRangeEnd;
+    })
+  ), [reviewSourceData, hasWordRange, effectiveRangeStart, effectiveRangeEnd]);
+
   const practiceDataList = useMemo(() => (
-    practiceSource === 'review' ? reviewSourceData : (dataList || [])
-  ), [practiceSource, reviewSourceData, dataList]);
+    practiceSource === 'review' ? filteredReviewData : filteredVocabularyData
+  ), [practiceSource, filteredReviewData, filteredVocabularyData]);
 
   useEffect(() => {
     if (!isPracticeTab || practiceSource !== 'review' || reviewSourceData.length > 0) {
@@ -287,10 +335,11 @@ export default function App() {
   }, [activeTab, isPracticeTab, practiceSource, reviewSourceData.length]);
 
   const pickRandomVocabularyWords = (count) => {
-    const pool = (dataList || [])
+    const pool = filteredVocabularyData
       .map((it) => String(it?.vocabulary || '').trim())
       .filter(Boolean);
     const uniquePool = Array.from(new Set(pool));
+    if (!uniquePool.length) return [];
     const safeCount = Math.max(1, Math.min(Number(count) || 1, uniquePool.length || 1));
     const shuffled = [...uniquePool];
     for (let i = shuffled.length - 1; i > 0; i -= 1) {
@@ -307,11 +356,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!translationWords.length && (dataList || []).length) {
+    if (!translationWords.length && filteredVocabularyData.length) {
       setTranslationWords(pickRandomVocabularyWords(translationWordCount));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataList]);
+  }, [filteredVocabularyData]);
 
   useEffect(() => {
     if (!isCountdownRunning) {
@@ -366,6 +415,27 @@ export default function App() {
       'write-word': buildRandomOrderIndexes(n)
     });
   }, [practiceDataList]);
+
+  useEffect(() => {
+    const nextRangeKey = `${effectiveRangeStart}:${effectiveRangeEnd}`;
+    if (lastAppliedRangeRef.current === nextRangeKey) {
+      return;
+    }
+    lastAppliedRangeRef.current = nextRangeKey;
+    setPendingReviewRemoval(null);
+    setHoveredOption(null);
+    setDisabledMap({});
+    setQuizState((prev) => ({
+      ...prev,
+      'en-to-vi': { ...prev['en-to-vi'], index: 0, selected: '', checked: false, feedback: '' },
+      'vi-to-en': { ...prev['vi-to-en'], index: 0, selected: '', checked: false, feedback: '' },
+      mixed: { ...prev.mixed, index: 0, selected: '', checked: false, feedback: '' },
+      'write-word': { ...prev['write-word'], index: 0, input: '', checked: false, feedback: '' },
+      translation: { ...prev.translation, input: '', checked: false, feedback: '' },
+      review: { ...prev.review, index: 0, selected: '', checked: false, feedback: '' }
+    }));
+    setTranslationWords([]);
+  }, [effectiveRangeStart, effectiveRangeEnd]);
 
   // quiz state
   const [quizState, setQuizState] = useState({
@@ -487,7 +557,7 @@ export default function App() {
     // try find matching row in dataList: match vocabulary or vietnamMeaning (robust compare)
     const norm = (s) => normalizeText(String(s || ''));
     const targetNorm = norm(optToMatch);
-    const detailLookupData = activeTab === 'translation' ? (dataList || []) : (practiceDataList || []);
+    const detailLookupData = activeTab === 'translation' ? filteredVocabularyData : (practiceDataList || []);
     const found = detailLookupData.find((it) => {
       if (!it) return false;
       if (String(it.vocabulary || '') === optToMatch) return true;
@@ -497,7 +567,7 @@ export default function App() {
       return false;
     });
     return found || currentQuestion.detail || null;
-  }, [hoveredOption, currentQuestion, practiceDataList, dataList, activeTab, currentTabState]);
+  }, [hoveredOption, currentQuestion, practiceDataList, filteredVocabularyData, activeTab, currentTabState]);
   // clear hover when question changes (keeps default first option)
   useEffect(() => {
     // do NOT clear hoveredOption here — keep last mouse-pointed vocab across navigation
@@ -564,7 +634,7 @@ export default function App() {
     const normalized = normalizeText(text);
     if (!normalized) return null;
 
-    const matched = (dataList || []).find((item) => {
+    const matched = normalizedDataList.find((item) => {
       const vocabulary = normalizeText(item?.vocabulary || '');
       const meaning = normalizeText(item?.vietnamMeaning || '');
       const synonym = normalizeText(item?.synonym || '');
@@ -586,6 +656,15 @@ export default function App() {
       translatedText: String(translatedText),
       provider: 'local-vocab'
     };
+  };
+
+  const updateWordRangeField = (field, value) => {
+    const digitsOnly = String(value || '').replace(/[^\d]/g, '');
+    setWordRange((prev) => ({ ...(prev || {}), [field]: digitsOnly }));
+  };
+
+  const clearWordRange = () => {
+    setWordRange({ start: '', end: '' });
   };
 
   const closeTranslatePopover = () => {
@@ -1426,7 +1505,7 @@ export default function App() {
 
   const currentWordDetail = hoverDetail || currentQuestion?.detail || null;
   const canSaveCurrentWord = !!(currentWordDetail?.vocabulary || currentWordDetail?.vietnamMeaning);
-  const reviewItems = [...(reviewList || [])].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
+  const reviewItems = [...filteredReviewData].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
   const writingLogItems = [...(writingLogList || [])].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
   const activeGroupLabel = groupedTabs.find((t) => t.id === activeGroup)?.label || '';
   const activeModeLabel = activeGroup === 'mcq'
@@ -1435,6 +1514,7 @@ export default function App() {
       ? (writingModes.find((m) => m.id === writingMode)?.label || '')
       : (libraryModes.find((m) => m.id === libraryMode)?.label || '');
   const sampleRow = sheetPreviewRows && sheetPreviewRows.length ? sheetPreviewRows[0] : null;
+  const totalWordCount = normalizedDataList.length;
   const resolveHeaderKey = (target) => {
     if (!target || !sheetHeaders || !sheetHeaders.length) return null;
     const t = String(target).trim().toLowerCase();
@@ -1459,9 +1539,6 @@ export default function App() {
             <p>Bản demo: dùng Settings để nối Google Sheets hoặc dùng dữ liệu mẫu.</p>
           </div>
           <div className="score-board">
-            <div className="score-item"><span>Điểm</span><strong>{currentTabState.score}</strong></div>
-            <div className="score-item"><span>Đã làm</span><strong>{currentTabState.answered}</strong></div>
-            <div className="score-item"><span>Tab</span><strong>{activeModeLabel || activeGroupLabel}</strong></div>
             <div className="top-tools-row">
               <button className="ghost-button settings-top-button" onClick={() => setSettingsOpen((s) => !s)}>Settings</button>
 
@@ -1503,6 +1580,38 @@ export default function App() {
                   </button>
                 </div>
 
+              </div>
+            </div>
+            <div className="focus-range-bar hero-focus-range-bar">
+              <div className="focus-range-controls">
+                <label className="focus-range-field">
+                  <span>Start</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="1"
+                    value={wordRange?.start || ''}
+                    onChange={(e) => updateWordRangeField('start', e.target.value)}
+                  />
+                </label>
+                <label className="focus-range-field">
+                  <span>End</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder={totalWordCount ? String(totalWordCount) : '...'}
+                    value={wordRange?.end || ''}
+                    onChange={(e) => updateWordRangeField('end', e.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="ghost-button focus-range-reset"
+                  onClick={clearWordRange}
+                  disabled={!hasWordRange}
+                >
+                  All
+                </button>
               </div>
             </div>
           </div>
@@ -1673,7 +1782,7 @@ export default function App() {
                   {activeGroupLabel}
                 </span>
                 <h2>
-                  {activeTab === 'review' ? `Review (${(reviewList || []).length})`
+                  {activeTab === 'review' ? `Review (${reviewItems.length})`
                     : activeTab === 'writing-log' ? `Writing Log (${(writingLogItems || []).length})`
                     : activeModeLabel || currentQuestion?.title}
                 </h2>
@@ -1807,7 +1916,7 @@ export default function App() {
                 <p style={{ margin: 0 }}><strong>No question available for this mode.</strong></p>
                 <p style={{ marginTop: 8 }}>
                   Data source: <strong>{isPracticeTab ? (practiceSource === 'review' ? 'Review Data' : 'Original Data') : 'Default'}</strong>.
-                  {' '}Available words: {isPracticeTab ? (practiceDataList?.length || 0) : (dataList?.length || 0)}.
+                  {' '}Available words: {isPracticeTab ? (practiceDataList?.length || 0) : (filteredVocabularyData?.length || 0)}.
                 </p>
                 <p style={{ marginTop: 8, fontSize: 14, color: '#557261' }}>
                   Valid rows:
