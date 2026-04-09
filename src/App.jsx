@@ -27,7 +27,6 @@ const libraryModes = [
   { id: 'writing-log', label: 'Writing Log' }
 ];
 const practiceTabs = ['en-to-vi', 'vi-to-en', 'mixed', 'write-word'];
-const DEFAULT_COUNTDOWN_SECONDS = 5 * 60;
 const SCHEMA_FIELDS = [
   { key: 'vocabulary', label: 'Vocabulary', hint: 'Tu vung chinh' },
   { key: 'type', label: 'Type', hint: 'Tu loai' },
@@ -88,42 +87,6 @@ const resolveMappingForHeaders = (headers, previousMapping = {}) => {
     sentences_vi: hasHeader(previousMapping.sentences_vi) ? previousMapping.sentences_vi : findHeader(MAPPING_SUGGESTERS.sentences_vi),
     learn: hasHeader(previousMapping.learn) ? previousMapping.learn : findHeader(MAPPING_SUGGESTERS.learn)
   };
-};
-
-const parseCountdownInput = (rawValue) => {
-  const value = String(rawValue || '').trim();
-  if (!value) return 0;
-
-  if (!value.includes(':')) {
-    const minutes = Number.parseInt(value, 10);
-    return Number.isNaN(minutes) ? 0 : Math.max(0, minutes * 60);
-  }
-
-  const parts = value.split(':').map((part) => Number.parseInt(part.trim(), 10));
-  if (parts.some((part) => Number.isNaN(part) || part < 0)) return 0;
-
-  if (parts.length === 2) {
-    const [minutes, seconds] = parts;
-    return (minutes * 60) + Math.min(seconds, 59);
-  }
-
-  if (parts.length === 3) {
-    const [hours, minutes, seconds] = parts;
-    return (hours * 3600) + (Math.min(minutes, 59) * 60) + Math.min(seconds, 59);
-  }
-
-  return 0;
-};
-
-const formatCountdownTime = (totalSeconds) => {
-  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
-  const hours = Math.floor(safeSeconds / 3600);
-  const minutes = Math.floor((safeSeconds % 3600) / 60);
-  const seconds = safeSeconds % 60;
-  const pad = (value) => String(value).padStart(2, '0');
-
-  if (hours > 0) return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-  return `${pad(minutes)}:${pad(seconds)}`;
 };
 
 const buildRandomOrderIndexes = (count) => {
@@ -221,10 +184,6 @@ export default function App() {
   const [translationWordCount, setTranslationWordCount] = useState(5);
   const [translationWords, setTranslationWords] = useState([]);
   const [pendingReviewRemoval, setPendingReviewRemoval] = useState(null);
-  const [countdownInput, setCountdownInput] = useState('05:00');
-  const [countdownSeconds, setCountdownSeconds] = useState(DEFAULT_COUNTDOWN_SECONDS);
-  const [isCountdownRunning, setIsCountdownRunning] = useState(false);
-  const [showTimeUpNotice, setShowTimeUpNotice] = useState(false);
   const normalizedDataList = useMemo(() => attachWordOrder(dataList), [dataList]);
   const rawRangeStart = clampPositiveInteger(wordRange?.start);
   const rawRangeEnd = clampPositiveInteger(wordRange?.end);
@@ -251,8 +210,6 @@ export default function App() {
   const translatePopupRef = useRef(null);
   const savedToastTimerRef = useRef(null);
   const sourceSlapTimerRef = useRef(null);
-  const countdownTimerRef = useRef(null);
-  const timeUpNoticeTimerRef = useRef(null);
   const lastAppliedRangeRef = useRef('');
   
   const reviewSourceData = useMemo(() => {
@@ -361,44 +318,6 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredVocabularyData]);
-
-  useEffect(() => {
-    if (!isCountdownRunning) {
-      if (countdownTimerRef.current) {
-        clearInterval(countdownTimerRef.current);
-        countdownTimerRef.current = null;
-      }
-      return;
-    }
-
-    countdownTimerRef.current = setInterval(() => {
-      setCountdownSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(countdownTimerRef.current);
-          countdownTimerRef.current = null;
-          setIsCountdownRunning(false);
-          setShowTimeUpNotice(true);
-          playTimeUpSound();
-          if (timeUpNoticeTimerRef.current) {
-            clearTimeout(timeUpNoticeTimerRef.current);
-          }
-          timeUpNoticeTimerRef.current = setTimeout(() => {
-            setShowTimeUpNotice(false);
-            timeUpNoticeTimerRef.current = null;
-          }, 3375);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (countdownTimerRef.current) {
-        clearInterval(countdownTimerRef.current);
-        countdownTimerRef.current = null;
-      }
-    };
-  }, [isCountdownRunning]);
 
   // regenerate random orders whenever the active practice data source changes
   useEffect(() => {
@@ -803,34 +722,6 @@ export default function App() {
     }
   };
 
-  const playTimeUpSound = () => {
-    try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
-
-      const audioContext = new AudioContextClass();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      const now = audioContext.currentTime;
-
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(660, now);
-      oscillator.frequency.exponentialRampToValueAtTime(440, now + 0.32);
-
-      gainNode.gain.setValueAtTime(0.0001, now);
-      gainNode.gain.exponentialRampToValueAtTime(0.18, now + 0.04);
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      oscillator.start(now);
-      oscillator.stop(now + 0.4);
-      oscillator.onended = () => audioContext.close();
-    } catch (error) {
-      // ignore audio errors in browsers with stricter autoplay policies
-    }
-  };
-
   const upsertReviewEntry = (entry) => {
     const detail = entry?.detail || null;
     const vocabulary = String(detail?.vocabulary || entry?.answer || entry?.word || '').trim();
@@ -1231,50 +1122,7 @@ export default function App() {
     if (sourceSlapTimerRef.current) {
       clearTimeout(sourceSlapTimerRef.current);
     }
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
-    }
-    if (timeUpNoticeTimerRef.current) {
-      clearTimeout(timeUpNoticeTimerRef.current);
-    }
   }, []);
-
-  const handleStartCountdown = () => {
-    const parsedSeconds = countdownSeconds > 0 ? countdownSeconds : parseCountdownInput(countdownInput);
-    if (parsedSeconds <= 0) {
-      setShowTimeUpNotice(true);
-      if (timeUpNoticeTimerRef.current) {
-        clearTimeout(timeUpNoticeTimerRef.current);
-      }
-      timeUpNoticeTimerRef.current = setTimeout(() => {
-        setShowTimeUpNotice(false);
-        timeUpNoticeTimerRef.current = null;
-      }, 2000);
-      return;
-    }
-    setCountdownSeconds(parsedSeconds);
-    setShowTimeUpNotice(false);
-    setIsCountdownRunning(true);
-  };
-
-  const handlePauseCountdown = () => {
-    setIsCountdownRunning(false);
-  };
-
-  const handleResetCountdown = () => {
-    const parsedSeconds = parseCountdownInput(countdownInput) || DEFAULT_COUNTDOWN_SECONDS;
-    setIsCountdownRunning(false);
-    setCountdownSeconds(parsedSeconds);
-    setShowTimeUpNotice(false);
-  };
-
-  const handleCountdownInputChange = (value) => {
-    setCountdownInput(value);
-    if (!isCountdownRunning) {
-      setCountdownSeconds(parseCountdownInput(value));
-      setShowTimeUpNotice(false);
-    }
-  };
 
   const handlePrev = () => {
     setPendingReviewRemoval(null);
@@ -1534,53 +1382,13 @@ export default function App() {
       <main className="container">
         <section className="hero-card">
           <div>
-            <span className="eyebrow">English Practice Web App</span>
-            <h1>Kiểm tra từ vựng, cách dùng và đặt câu</h1>
-            <p>Bản demo: dùng Settings để nối Google Sheets hoặc dùng dữ liệu mẫu.</p>
+            <span className="eyebrow">Super Memo</span>
+            <h1>Super Memo</h1>
+            <p>Luyện từ vựng gọn gàng trên điện thoại với bộ dữ liệu của riêng bạn.</p>
           </div>
           <div className="score-board">
             <div className="top-tools-row">
               <button className="ghost-button settings-top-button" onClick={() => setSettingsOpen((s) => !s)}>Settings</button>
-
-              <div className="countdown-widget">
-                <div className="countdown-meta">
-                  <div className="countdown-header">
-                    <svg className="clock-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M12 7.25V12.15L15.3 14.1" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M7.25 3.8L4.4 6.15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-                      <path d="M16.75 3.8L19.6 6.15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-                      <circle cx="12" cy="12.2" r="7.7" stroke="currentColor" strokeWidth="2.2" />
-                    </svg>
-                  </div>
-                  <div className={`countdown-display ${countdownSeconds === 0 ? 'is-finished' : ''}`}>
-                    {formatCountdownTime(countdownSeconds)}
-                  </div>
-                </div>
-
-                <div className="countdown-controls">
-                  <input
-                    className="countdown-input"
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="05:00"
-                    value={countdownInput}
-                    onChange={(e) => handleCountdownInputChange(e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                    aria-label="Nhap thoi gian countdown"
-                  />
-                  <button
-                    type="button"
-                    className="countdown-button start"
-                    onClick={isCountdownRunning ? handlePauseCountdown : handleStartCountdown}
-                  >
-                    {isCountdownRunning ? 'Pause' : 'Start'}
-                  </button>
-                  <button type="button" className="countdown-button" onClick={handleResetCountdown}>
-                    Reset
-                  </button>
-                </div>
-
-              </div>
             </div>
             <div className="focus-range-bar hero-focus-range-bar">
               <div className="focus-range-controls">
@@ -2161,11 +1969,6 @@ export default function App() {
         </div>
       )}
       <div className={`saved-toast ${showSavedToast ? 'show' : ''}`}>Saved</div>
-      <div className={`timeup-overlay ${showTimeUpNotice ? 'show' : ''}`}>
-        <div className={`timeup-toast ${showTimeUpNotice ? 'show' : ''}`} role="status">
-          Hết giờ rồi!
-        </div>
-      </div>
     </div>
   );
 }

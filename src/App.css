@@ -69,99 +69,6 @@ input {
   padding: 32px 0 48px;
 }
 
-.countdown-widget {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: 14px;
-  background: rgba(247, 252, 248, 0.78);
-  border: 1px solid rgba(216, 236, 221, 0.95);
-  min-width: 0;
-}
-
-.countdown-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.countdown-header {
-  display: flex;
-  align-items: center;
-  color: #3f7155;
-}
-
-.clock-icon {
-  width: 22px;
-  height: 22px;
-}
-
-.countdown-display {
-  font-size: 0.95rem;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: 0.05em;
-  color: #173327;
-  min-width: 58px;
-}
-
-.countdown-display.is-finished {
-  color: #bd3d3d;
-}
-
-.countdown-controls {
-  display: grid;
-  grid-template-columns: minmax(78px, 1fr) repeat(2, minmax(58px, auto));
-  gap: 5px;
-  width: 100%;
-  min-width: 0;
-}
-
-.countdown-input {
-  width: 100%;
-  border: 1px solid #d7eadc;
-  border-radius: 10px;
-  padding: 6px 9px;
-  background: rgba(255, 255, 255, 0.86);
-  color: #284837;
-  outline: none;
-}
-
-.countdown-input:focus {
-  border-color: #73bf8a;
-  box-shadow: 0 0 0 4px rgba(115, 191, 138, 0.15);
-}
-
-.countdown-button {
-  border: none;
-  border-radius: 10px;
-  padding: 6px 8px;
-  background: #e7f7ec;
-  color: #27563b;
-  font-size: 0.76rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.countdown-button.start {
-  background: linear-gradient(135deg, #69bc82 0%, #449d63 100%);
-  color: #fff;
-}
-
-.countdown-alert {
-  padding: 8px 10px;
-  border-radius: 14px;
-  background: #fff0f0;
-  border: 1px solid #efbbbb;
-  color: #b53636;
-  font-size: 0.82rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
 .hero-card,
 .question-card,
 .side-card,
@@ -955,42 +862,6 @@ input {
   transform: translate(-50%, -50%) scale(1);
 }
 
-.timeup-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9998;
-  background: rgba(213, 53, 53, 0.2);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.25s ease;
-}
-
-.timeup-overlay.show {
-  opacity: 1;
-}
-
-.timeup-toast {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%) scale(0.94);
-  padding: 16px 28px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #e54545 0%, #c81f1f 100%);
-  box-shadow: 0 24px 48px rgba(161, 24, 24, 0.26);
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  opacity: 0;
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-.timeup-toast.show {
-  opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
-}
-
 @media (max-width: 960px) {
   .hero-card,
   .practice-grid {
@@ -1014,21 +885,6 @@ input {
   .container {
     width: min(100% - 20px, 1180px);
     padding-top: 20px;
-  }
-
-  .countdown-widget {
-    width: 100%;
-    display: grid;
-    padding: 14px;
-  }
-
-  .countdown-display {
-    font-size: 1.8rem;
-  }
-
-  .countdown-controls {
-    grid-template-columns: 1fr 1fr 1fr;
-    width: 100%;
   }
 
   .top-tools-row {
@@ -1091,5 +947,13 @@ input {
 
   .mode-switch {
     margin-left: 0;
+  }
+
+  .question-card {
+    order: 1;
+  }
+
+  .side-card {
+    order: 2;
   }
 }
