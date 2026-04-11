@@ -29,6 +29,7 @@ const libraryModes = [
 const practiceTabs = ['en-to-vi', 'vi-to-en', 'mixed', 'write-word'];
 const SCHEMA_FIELDS = [
   { key: 'vocabulary', label: 'Vocabulary', hint: 'Tu vung chinh' },
+  { key: 'cat', label: 'CAT', hint: 'Nhom / loai de loc vocab' },
   { key: 'type', label: 'Type', hint: 'Tu loai' },
   { key: 'pronun', label: 'Pronunciation', hint: 'Phat am / phonetic' },
   { key: 'vietnamMeaning', label: 'Meaning', hint: 'Nghia tieng Viet' },
@@ -42,6 +43,7 @@ const SCHEMA_FIELDS = [
 ];
 const MAPPING_SUGGESTERS = {
   vocabulary: [/vocab|vocabulary/i],
+  cat: [/^cat$/i, /category|group|tag/i],
   type: [/type|pos|class/i],
   pronun: [/pronun|pronounce|phonetic|pron/i],
   vietnamMeaning: [/meaning|viet|vietnam/i],
@@ -76,6 +78,7 @@ const resolveMappingForHeaders = (headers, previousMapping = {}) => {
 
   return {
     vocabulary: hasHeader(previousMapping.vocabulary) ? previousMapping.vocabulary : (findHeader(MAPPING_SUGGESTERS.vocabulary) || headerList[0] || ''),
+    cat: hasHeader(previousMapping.cat) ? previousMapping.cat : findHeader(MAPPING_SUGGESTERS.cat),
     type: hasHeader(previousMapping.type) ? previousMapping.type : findHeader(MAPPING_SUGGESTERS.type),
     pronun: hasHeader(previousMapping.pronun) ? previousMapping.pronun : findHeader(MAPPING_SUGGESTERS.pronun),
     vietnamMeaning: hasHeader(previousMapping.vietnamMeaning) ? previousMapping.vietnamMeaning : findHeader(MAPPING_SUGGESTERS.vietnamMeaning),
@@ -87,6 +90,24 @@ const resolveMappingForHeaders = (headers, previousMapping = {}) => {
     sentences_vi: hasHeader(previousMapping.sentences_vi) ? previousMapping.sentences_vi : findHeader(MAPPING_SUGGESTERS.sentences_vi),
     learn: hasHeader(previousMapping.learn) ? previousMapping.learn : findHeader(MAPPING_SUGGESTERS.learn)
   };
+};
+
+const CATEGORY_ALL = 'ALL';
+const CATEGORY_WAITING = 'Waiting';
+
+const resolveCategoryLabel = (item) => {
+  const rawValue = String(item?.cat || item?.type || '').trim();
+  return rawValue || CATEGORY_WAITING;
+};
+
+const buildCategoryOptions = (list) => {
+  const uniqueCategories = Array.from(new Set(
+    (Array.isArray(list) ? list : [])
+      .map((item) => resolveCategoryLabel(item))
+      .filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b));
+
+  return [CATEGORY_ALL, ...uniqueCategories];
 };
 
 const buildRandomOrderIndexes = (count) => {
@@ -121,6 +142,7 @@ export default function App() {
   const [sheetUrl, setSheetUrl] = useLocalStorage('vocab_sheet_url', '');
   const [mapping, setMapping] = useLocalStorage('vocab_mapping', {
     vocabulary: '',
+    cat: '',
     type: '',
     pronun: '',
     vietnamMeaning: '',
@@ -144,6 +166,7 @@ export default function App() {
   const [writingMode, setWritingMode] = useLocalStorage('vocab_writing_mode', 'write-word');
   const [libraryMode, setLibraryMode] = useLocalStorage('vocab_library_mode', 'review');
   const [practiceSource, setPracticeSource] = useLocalStorage('vocab_practice_source', 'all');
+  const [selectedCategory, setSelectedCategory] = useLocalStorage('vocab_selected_category', CATEGORY_ALL);
   const [sheetHeaders, setSheetHeaders] = useState([]);
   const [sheetPreviewRows, setSheetPreviewRows] = useState([]);
   // persistent voice toggle (shortcut 'v')
@@ -239,6 +262,7 @@ export default function App() {
 
         byKey.set(key, {
           vocabulary: word || meaning || '—',
+          cat: '',
           vietnamMeaning: meaning || '',
           _rowNumber: null,
           type: '',
@@ -258,20 +282,30 @@ export default function App() {
     mappingRef.current = mapping;
   }, [mapping]);
 
+  const categoryOptions = useMemo(() => buildCategoryOptions(normalizedDataList), [normalizedDataList]);
+
+  useEffect(() => {
+    if (!categoryOptions.includes(selectedCategory)) {
+      setSelectedCategory(CATEGORY_ALL);
+    }
+  }, [categoryOptions, selectedCategory, setSelectedCategory]);
+
   const filteredVocabularyData = useMemo(() => (
     normalizedDataList.filter((item) => {
       const rowNumber = resolveWordOrder(item, 0);
-      return rowNumber >= effectiveRangeStart && rowNumber <= effectiveRangeEnd;
+      const matchedCategory = selectedCategory === CATEGORY_ALL || resolveCategoryLabel(item) === selectedCategory;
+      return rowNumber >= effectiveRangeStart && rowNumber <= effectiveRangeEnd && matchedCategory;
     })
-  ), [normalizedDataList, effectiveRangeStart, effectiveRangeEnd]);
+  ), [normalizedDataList, effectiveRangeStart, effectiveRangeEnd, selectedCategory]);
 
   const filteredReviewData = useMemo(() => (
     reviewSourceData.filter((item) => {
       const rowNumber = clampPositiveInteger(item?._rowNumber);
-      if (rowNumber === null) return !hasWordRange;
-      return rowNumber >= effectiveRangeStart && rowNumber <= effectiveRangeEnd;
+      const matchedCategory = selectedCategory === CATEGORY_ALL || resolveCategoryLabel(item) === selectedCategory;
+      if (rowNumber === null) return !hasWordRange && matchedCategory;
+      return rowNumber >= effectiveRangeStart && rowNumber <= effectiveRangeEnd && matchedCategory;
     })
-  ), [reviewSourceData, hasWordRange, effectiveRangeStart, effectiveRangeEnd]);
+  ), [reviewSourceData, hasWordRange, effectiveRangeStart, effectiveRangeEnd, selectedCategory]);
 
   const practiceDataList = useMemo(() => (
     practiceSource === 'review' ? filteredReviewData : filteredVocabularyData
@@ -354,7 +388,7 @@ export default function App() {
       review: { ...prev.review, index: 0, selected: '', checked: false, feedback: '' }
     }));
     setTranslationWords([]);
-  }, [effectiveRangeStart, effectiveRangeEnd]);
+  }, [effectiveRangeStart, effectiveRangeEnd, selectedCategory]);
 
   // quiz state
   const [quizState, setQuizState] = useState({
@@ -1269,6 +1303,7 @@ export default function App() {
       const hasText = (value) => !!String(value || '').trim();
       const diagnostics = {
         totalMappedRows: mapped.length,
+        withCat: mapped.filter((item) => hasText(item?.cat)).length,
         withVocabulary: mapped.filter((item) => hasText(item?.vocabulary)).length,
         withMeaning: mapped.filter((item) => hasText(item?.vietnamMeaning)).length,
         withSentenceEn: mapped.filter((item) => hasText(item?.sentences?.en)).length,
@@ -1406,6 +1441,7 @@ export default function App() {
       : (libraryModes.find((m) => m.id === libraryMode)?.label || '');
   const sampleRow = sheetPreviewRows && sheetPreviewRows.length ? sheetPreviewRows[0] : null;
   const totalWordCount = normalizedDataList.length;
+  const visibleWordCount = filteredVocabularyData.length;
   const resolveHeaderKey = (target) => {
     if (!target || !sheetHeaders || !sheetHeaders.length) return null;
     const t = String(target).trim().toLowerCase();
@@ -1463,6 +1499,25 @@ export default function App() {
                 >
                   All
                 </button>
+              </div>
+            </div>
+            <div className="category-filter-bar">
+              <div className="category-filter-copy">
+                <span className="category-filter-label">CAT Filter</span>
+                <strong>{selectedCategory}</strong>
+                <span>{visibleWordCount}/{totalWordCount} vocab</span>
+              </div>
+              <div className="category-filter-chips" role="tablist" aria-label="Vocabulary category filter">
+                {categoryOptions.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    className={`category-chip ${selectedCategory === category ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory(category)}
+                  >
+                    {category}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
