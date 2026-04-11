@@ -1353,6 +1353,17 @@ export default function App() {
 
   const currentWordDetail = hoverDetail || currentQuestion?.detail || null;
   const canSaveCurrentWord = !!(currentWordDetail?.vocabulary || currentWordDetail?.vietnamMeaning);
+  const currentPromptWord = String(
+    currentQuestion?.detail?.vocabulary
+    || hoverDetail?.vocabulary
+    || currentQuestion?.vocabulary
+    || ''
+  ).trim();
+  const currentPromptExample = String(
+    currentQuestion?.detail?.sentences?.en
+    || hoverDetail?.sentences?.en
+    || ''
+  ).trim();
   const reviewItems = [...filteredReviewData].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
   const writingLogItems = [...(writingLogList || [])].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
   const activeGroupLabel = groupedTabs.find((t) => t.id === activeGroup)?.label || '';
@@ -1745,6 +1756,35 @@ export default function App() {
               </div>
             ) : (
               <>
+                {isMcqTab && (
+                  <div className="mobile-practice-top">
+                    <div className="library-progress mobile-library-progress">
+                      <div className="library-progress-item">
+                        <span>Learned</span>
+                        <strong>{learnedCount}</strong>
+                      </div>
+                      <div className="library-progress-item">
+                        <span>Remain</span>
+                        <strong>{remainCount}</strong>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="mobile-voice-button"
+                      onClick={() => speak(currentPromptWord || currentQuestion?.answer || '', 'en-US')}
+                      disabled={!(currentPromptWord || currentQuestion?.answer)}
+                      aria-label="Speak current word"
+                      title="Speak current word"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 9v6h4l5 4V5L9 9H5z" />
+                        <path d="M16.5 8.5a5 5 0 0 1 0 7" />
+                        <path d="M19 6a8.5 8.5 0 0 1 0 12" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+
                 <div
                   className="prompt-box"
                   onMouseEnter={() => {
@@ -1759,7 +1799,17 @@ export default function App() {
                   <span className="prompt-label">
                     {activeTab === 'translation' ? 'Đề bài' : 'Câu hỏi'}
                   </span>
-                  <p>{renderPromptText()}</p>
+                  <div className="desktop-prompt-text">
+                    <p>{renderPromptText()}</p>
+                  </div>
+                  {isMcqTab ? (
+                    <div className="mobile-prompt-body">
+                      <p className="mobile-prompt-word">{currentPromptWord || renderPromptText()}</p>
+                      {currentPromptExample ? (
+                        <p className="mobile-prompt-example">{currentPromptExample}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
 
                 {activeTab === 'translation' ? (
@@ -1863,15 +1913,16 @@ export default function App() {
                      })}
                    </div>
                  )}
-                <div className={`feedback-box ${currentTabState.feedback ? 'show' : ''}`}>{currentTabState.feedback || 'Chọn đáp án.'}</div>
+                {currentTabState.feedback ? (
+                  <div className={`feedback-box show ${/^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error'} ${isMcqTab ? 'mcq-feedback' : ''}`}>
+                    {currentTabState.feedback}
+                  </div>
+                ) : null}
 
                 <div className="actions">
                   <button className="secondary-button" onClick={handleNext}>Next →</button>
                   {isMcqTab && (
-                    <button className="secondary-button" onClick={handleResetLibrary}>Reset Library</button>
-                  )}
-                  {isMcqTab && (
-                    <div className="library-progress">
+                    <div className="library-progress desktop-library-progress">
                       <div className="library-progress-item">
                         <span>Learned</span>
                         <strong>{learnedCount}</strong>
