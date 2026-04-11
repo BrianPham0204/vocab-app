@@ -1353,15 +1353,47 @@ export default function App() {
 
   const currentWordDetail = hoverDetail || currentQuestion?.detail || null;
   const canSaveCurrentWord = !!(currentWordDetail?.vocabulary || currentWordDetail?.vietnamMeaning);
-  const currentPromptWord = String(
+  const mobilePromptContent = useMemo(() => {
+    if (!currentQuestion) return { primary: '', secondary: '' };
+
+    if (activeTab === 'en-to-vi') {
+      return {
+        primary: String(currentQuestion?.detail?.vocabulary || currentQuestion?.prompt || '').trim(),
+        secondary: String(currentQuestion?.detail?.sentences?.en || '').trim()
+      };
+    }
+
+    if (activeTab === 'vi-to-en') {
+      return {
+        primary: String(currentQuestion?.prompt || currentQuestion?.detail?.vietnamMeaning || '').trim(),
+        secondary: String(currentQuestion?.detail?.sentences?.vi || '').trim()
+      };
+    }
+
+    if (activeTab === 'mixed') {
+      return {
+        primary: renderPromptText(),
+        secondary: String(currentQuestion?.detail?.sentences?.vi || '').trim()
+      };
+    }
+
+    if (activeTab === 'write-word') {
+      return {
+        primary: String(currentQuestion?.prompt || currentQuestion?.detail?.vietnamMeaning || '').trim(),
+        secondary: String(currentQuestion?.detail?.sentences?.vi || '').trim()
+      };
+    }
+
+    return {
+      primary: String(currentQuestion?.prompt || '').trim(),
+      secondary: ''
+    };
+  }, [activeTab, currentQuestion, renderPromptText]);
+  const currentPromptWord = mobilePromptContent.primary;
+  const currentPromptExample = mobilePromptContent.secondary;
+  const currentVoiceText = String(
     currentQuestion?.detail?.vocabulary
-    || hoverDetail?.vocabulary
-    || currentQuestion?.vocabulary
-    || ''
-  ).trim();
-  const currentPromptExample = String(
-    currentQuestion?.detail?.sentences?.en
-    || hoverDetail?.sentences?.en
+    || currentQuestion?.answer
     || ''
   ).trim();
   const reviewItems = [...filteredReviewData].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
@@ -1771,8 +1803,8 @@ export default function App() {
                     <button
                       type="button"
                       className="mobile-voice-button"
-                      onClick={() => speak(currentPromptWord || currentQuestion?.answer || '', 'en-US')}
-                      disabled={!(currentPromptWord || currentQuestion?.answer)}
+                      onClick={() => speak(currentVoiceText, 'en-US')}
+                      disabled={!currentVoiceText}
                       aria-label="Speak current word"
                       title="Speak current word"
                     >
@@ -1802,7 +1834,7 @@ export default function App() {
                   <div className="desktop-prompt-text">
                     <p>{renderPromptText()}</p>
                   </div>
-                  {isMcqTab ? (
+                  {isMcqTab || activeTab === 'write-word' ? (
                     <div className="mobile-prompt-body">
                       <p className="mobile-prompt-word">{currentPromptWord || renderPromptText()}</p>
                       {currentPromptExample ? (
