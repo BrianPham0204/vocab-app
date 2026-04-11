@@ -1366,7 +1366,7 @@ export default function App() {
     if (activeTab === 'vi-to-en') {
       return {
         primary: String(currentQuestion?.prompt || currentQuestion?.detail?.vietnamMeaning || '').trim(),
-        secondary: String(currentQuestion?.detail?.sentences?.vi || '').trim()
+        secondary: String(currentQuestion?.detail?.sentences?.en || '').trim()
       };
     }
 
