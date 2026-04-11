@@ -1009,7 +1009,8 @@ input {
   }
 
   .side-card {
-    display: none;
+    display: block;
+    order: 2;
   }
 
   .mobile-practice-top {
