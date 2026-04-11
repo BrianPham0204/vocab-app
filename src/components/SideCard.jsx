@@ -30,7 +30,7 @@ export default function SideCard({ activeTab, hoverDetail, speak, onSaveCurrentW
         </button>
       </div>
 
-      <p><strong>CAT:</strong> {hoverDetail?.cat || hoverDetail?.type || 'Waiting'}</p>
+      <p><strong>CAT:</strong> {hoverDetail?.cat || 'WAIT'}</p>
       <p><strong>Type:</strong> {hoverDetail?.type || '—'}</p>
       <p><strong>Pronunciation:</strong> {hoverDetail?.pronun || '—'}</p>
       <p><strong>Word family:</strong> {hoverDetail?.wordFamily || '—'}</p>

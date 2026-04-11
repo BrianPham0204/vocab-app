@@ -1,7 +1,7 @@
 export const vocabularyData = [
   {
     vocabulary: 'endeavor',
-    cat: 'Verb',
+    cat: 'ACT',
     wordFamily: 'endeavor (n/v) | endeavors (n.pl/v-s) | endeavoring (v-ing) | endeavored (v-ed)',
     synonym: 'attempt | effort | try',
     vietnamMeaning: 'nỗ lực; cố gắng',
@@ -12,7 +12,7 @@ export const vocabularyData = [
   },
   {
     vocabulary: 'breeze',
-    cat: 'Noun',
+    cat: 'THG',
     wordFamily: 'breeze (n/v) | breezy (adj)',
     synonym: 'wind | easy task',
     vietnamMeaning: 'cơn gió nhẹ; việc rất dễ',
@@ -23,7 +23,7 @@ export const vocabularyData = [
   },
   {
     vocabulary: 'avid',
-    cat: 'Adjective',
+    cat: 'GEN',
     wordFamily: 'avid (adj) | avidly (adv) | avidity (n)',
     synonym: 'eager | enthusiastic | keen',
     vietnamMeaning: 'say mê; rất thích',
@@ -34,7 +34,7 @@ export const vocabularyData = [
   },
   {
     vocabulary: 'rigid',
-    cat: 'Adjective',
+    cat: 'STR',
     wordFamily: 'rigid (adj) | rigidly (adv) | rigidity (n)',
     synonym: 'strict | stiff | inflexible',
     vietnamMeaning: 'cứng nhắc; cứng',
@@ -45,7 +45,7 @@ export const vocabularyData = [
   },
   {
     vocabulary: 'sustain',
-    cat: 'Verb',
+    cat: 'LEV',
     wordFamily: 'sustain (v) | sustainable (adj) | sustainability (n) | sustained (adj/v-ed)',
     synonym: 'maintain | continue | support',
     vietnamMeaning: 'duy trì; chống đỡ',
@@ -56,7 +56,7 @@ export const vocabularyData = [
   },
   {
     vocabulary: 'tangible',
-    cat: 'Adjective',
+    cat: 'ENV',
     wordFamily: 'tangible (adj) | tangibly (adv) | tangibility (n)',
     synonym: 'real | clear | concrete',
     vietnamMeaning: 'hữu hình; rõ ràng',
@@ -67,7 +67,7 @@ export const vocabularyData = [
   },
   {
     vocabulary: 'remedy',
-    cat: 'Noun',
+    cat: 'LIF',
     wordFamily: 'remedy (n/v) | remedial (adj)',
     synonym: 'solution | cure | fix',
     vietnamMeaning: 'biện pháp khắc phục; chữa trị',

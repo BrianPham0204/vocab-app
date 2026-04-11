@@ -93,22 +93,16 @@ const resolveMappingForHeaders = (headers, previousMapping = {}) => {
 };
 
 const CATEGORY_ALL = 'ALL';
-const CATEGORY_WAITING = 'Waiting';
+const CATEGORY_WAIT = 'WAIT';
+const ALLOWED_CATEGORY_VALUES = ['ACT', 'THG', 'ENV', 'GEN', 'LIF', 'LEV', 'PHR', 'STR'];
 
 const resolveCategoryLabel = (item) => {
-  const rawValue = String(item?.cat || item?.type || '').trim();
-  return rawValue || CATEGORY_WAITING;
+  const rawValue = String(item?.cat || '').trim().toUpperCase();
+  if (!rawValue) return CATEGORY_WAIT;
+  return ALLOWED_CATEGORY_VALUES.includes(rawValue) ? rawValue : CATEGORY_WAIT;
 };
 
-const buildCategoryOptions = (list) => {
-  const uniqueCategories = Array.from(new Set(
-    (Array.isArray(list) ? list : [])
-      .map((item) => resolveCategoryLabel(item))
-      .filter(Boolean)
-  )).sort((a, b) => a.localeCompare(b));
-
-  return [CATEGORY_ALL, ...uniqueCategories];
-};
+const buildCategoryOptions = () => [CATEGORY_ALL, ...ALLOWED_CATEGORY_VALUES, CATEGORY_WAIT];
 
 const buildRandomOrderIndexes = (count) => {
   const arr = Array.from({ length: count }, (_, i) => i);
@@ -282,7 +276,7 @@ export default function App() {
     mappingRef.current = mapping;
   }, [mapping]);
 
-  const categoryOptions = useMemo(() => buildCategoryOptions(normalizedDataList), [normalizedDataList]);
+  const categoryOptions = useMemo(() => buildCategoryOptions(), []);
 
   useEffect(() => {
     if (!categoryOptions.includes(selectedCategory)) {
@@ -1502,22 +1496,24 @@ export default function App() {
               </div>
             </div>
             <div className="category-filter-bar">
-              <div className="category-filter-copy">
+              <label className="category-filter-copy" htmlFor="cat-filter-select">
                 <span className="category-filter-label">CAT Filter</span>
-                <strong>{selectedCategory}</strong>
-                <span>{visibleWordCount}/{totalWordCount} vocab</span>
-              </div>
-              <div className="category-filter-chips" role="tablist" aria-label="Vocabulary category filter">
-                {categoryOptions.map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    className={`category-chip ${selectedCategory === category ? 'active' : ''}`}
-                    onClick={() => setSelectedCategory(category)}
-                  >
-                    {category}
-                  </button>
-                ))}
+                <strong>{visibleWordCount}/{totalWordCount} vocab</strong>
+              </label>
+              <div className="category-filter-select-wrap">
+                <select
+                  id="cat-filter-select"
+                  className="category-filter-select"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  aria-label="Vocabulary CAT filter"
+                >
+                  {categoryOptions.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
