@@ -104,6 +104,21 @@ const resolveCategoryLabel = (item) => {
 
 const buildCategoryOptions = () => [CATEGORY_ALL, ...ALLOWED_CATEGORY_VALUES, CATEGORY_WAIT];
 
+const normalizeSelectedCategories = (value) => {
+  const rawList = Array.isArray(value) ? value : [value];
+  const normalized = rawList
+    .map((item) => String(item || '').trim().toUpperCase())
+    .filter(Boolean);
+
+  if (!normalized.length || normalized.includes(CATEGORY_ALL)) {
+    return [CATEGORY_ALL];
+  }
+
+  const allowed = new Set(buildCategoryOptions());
+  const unique = Array.from(new Set(normalized.filter((item) => allowed.has(item) && item !== CATEGORY_ALL)));
+  return unique.length ? unique : [CATEGORY_ALL];
+};
+
 const buildRandomOrderIndexes = (count) => {
   const arr = Array.from({ length: count }, (_, i) => i);
   for (let i = arr.length - 1; i > 0; i -= 1) {
@@ -117,6 +132,45 @@ const clampPositiveInteger = (value) => {
   const parsed = Number.parseInt(String(value || '').trim(), 10);
   if (Number.isNaN(parsed) || parsed <= 0) return null;
   return parsed;
+};
+
+const createDefaultOrders = () => ({
+  'en-to-vi': [],
+  'vi-to-en': [],
+  mixed: [],
+  'write-word': []
+});
+
+const createDefaultQuizState = () => ({
+  'en-to-vi': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
+  'vi-to-en': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
+  mixed: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
+  'write-word': { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 },
+  translation: { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 },
+  review: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
+  'writing-log': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 }
+});
+
+const createDefaultDisabledMap = () => ({});
+
+const sanitizeIndex = (value, max) => {
+  const parsed = Number.isFinite(value) ? value : Number.parseInt(String(value || '0'), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  if (typeof max !== 'number' || max < 0) return Math.max(0, parsed);
+  return Math.min(parsed, max);
+};
+
+const isPermutationOrder = (order, count) => {
+  if (!Array.isArray(order) || order.length !== count) return false;
+  const unique = new Set(order);
+  if (unique.size !== count) return false;
+  return order.every((value) => Number.isInteger(value) && value >= 0 && value < count);
+};
+
+const buildWriteWordFeedback = (question) => {
+  const answer = String(question?.answer || '').trim();
+  const synonym = String(question?.detail?.synonym || '').trim();
+  return [answer, synonym].filter(Boolean).join(' / ') || answer || '—';
 };
 
 const resolveWordOrder = (item, fallbackIndex) => {
@@ -160,7 +214,7 @@ export default function App() {
   const [writingMode, setWritingMode] = useLocalStorage('vocab_writing_mode', 'write-word');
   const [libraryMode, setLibraryMode] = useLocalStorage('vocab_library_mode', 'review');
   const [practiceSource, setPracticeSource] = useLocalStorage('vocab_practice_source', 'all');
-  const [selectedCategory, setSelectedCategory] = useLocalStorage('vocab_selected_category', CATEGORY_ALL);
+  const [selectedCategories, setSelectedCategories] = useLocalStorage('vocab_selected_category', [CATEGORY_ALL]);
   const [sheetHeaders, setSheetHeaders] = useState([]);
   const [sheetPreviewRows, setSheetPreviewRows] = useState([]);
   // persistent voice toggle (shortcut 'v')
@@ -175,12 +229,7 @@ export default function App() {
   });
 
   // random order per tab so words show randomly
-  const [orders, setOrders] = useState({
-    'en-to-vi': [],
-    'vi-to-en': [],
-    mixed: [],
-    'write-word': []
-  });
+  const [orders, setOrders] = useLocalStorage('vocab_orders', createDefaultOrders());
   const [showSentence, setShowSentence] = useState(false);
   // option hover state: which answer the mouse is currently over (null => use first option)
   const [hoveredOption, setHoveredOption] = useState(null);
@@ -227,7 +276,7 @@ export default function App() {
   const translatePopupRef = useRef(null);
   const savedToastTimerRef = useRef(null);
   const sourceSlapTimerRef = useRef(null);
-  const lastAppliedRangeRef = useRef('');
+  const lastAppliedRangeRef = useRef(null);
   
   const reviewSourceData = useMemo(() => {
     const list = Array.isArray(reviewList) ? reviewList : [];
@@ -277,29 +326,53 @@ export default function App() {
   }, [mapping]);
 
   const categoryOptions = useMemo(() => buildCategoryOptions(), []);
+  const normalizedSelectedCategories = useMemo(
+    () => normalizeSelectedCategories(selectedCategories),
+    [selectedCategories]
+  );
+  const isAllCategoriesSelected = normalizedSelectedCategories.includes(CATEGORY_ALL);
 
   useEffect(() => {
-    if (!categoryOptions.includes(selectedCategory)) {
-      setSelectedCategory(CATEGORY_ALL);
+    const nextCategories = normalizeSelectedCategories(selectedCategories);
+    const hasChanged = JSON.stringify(nextCategories) !== JSON.stringify(selectedCategories);
+    if (hasChanged) {
+      setSelectedCategories(nextCategories);
     }
-  }, [categoryOptions, selectedCategory, setSelectedCategory]);
+  }, [categoryOptions, selectedCategories, setSelectedCategories]);
+
+  const toggleCategory = (category) => {
+    setSelectedCategories((prev) => {
+      const current = normalizeSelectedCategories(prev);
+      if (category === CATEGORY_ALL) {
+        return [CATEGORY_ALL];
+      }
+
+      const next = current.includes(CATEGORY_ALL)
+        ? [category]
+        : current.includes(category)
+          ? current.filter((item) => item !== category)
+          : [...current, category];
+
+      return normalizeSelectedCategories(next);
+    });
+  };
 
   const filteredVocabularyData = useMemo(() => (
     normalizedDataList.filter((item) => {
       const rowNumber = resolveWordOrder(item, 0);
-      const matchedCategory = selectedCategory === CATEGORY_ALL || resolveCategoryLabel(item) === selectedCategory;
+      const matchedCategory = isAllCategoriesSelected || normalizedSelectedCategories.includes(resolveCategoryLabel(item));
       return rowNumber >= effectiveRangeStart && rowNumber <= effectiveRangeEnd && matchedCategory;
     })
-  ), [normalizedDataList, effectiveRangeStart, effectiveRangeEnd, selectedCategory]);
+  ), [normalizedDataList, effectiveRangeStart, effectiveRangeEnd, isAllCategoriesSelected, normalizedSelectedCategories]);
 
   const filteredReviewData = useMemo(() => (
     reviewSourceData.filter((item) => {
       const rowNumber = clampPositiveInteger(item?._rowNumber);
-      const matchedCategory = selectedCategory === CATEGORY_ALL || resolveCategoryLabel(item) === selectedCategory;
+      const matchedCategory = isAllCategoriesSelected || normalizedSelectedCategories.includes(resolveCategoryLabel(item));
       if (rowNumber === null) return !hasWordRange && matchedCategory;
       return rowNumber >= effectiveRangeStart && rowNumber <= effectiveRangeEnd && matchedCategory;
     })
-  ), [reviewSourceData, hasWordRange, effectiveRangeStart, effectiveRangeEnd, selectedCategory]);
+  ), [reviewSourceData, hasWordRange, effectiveRangeStart, effectiveRangeEnd, isAllCategoriesSelected, normalizedSelectedCategories]);
 
   const practiceDataList = useMemo(() => (
     practiceSource === 'review' ? filteredReviewData : filteredVocabularyData
@@ -347,24 +420,57 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredVocabularyData]);
 
-  // regenerate random orders whenever the active practice data source changes
+  // keep persisted quiz progress compatible with the current dataset/filter
   useEffect(() => {
-    const n = (practiceDataList && practiceDataList.length) || 0;
-    if (n === 0) {
-      // keep all known tabs present (including write-word) to avoid missing keys
-      setOrders({ 'en-to-vi': [], 'vi-to-en': [], mixed: [], 'write-word': [] });
-      return;
-    }
-    setOrders({
-      'en-to-vi': buildRandomOrderIndexes(n),
-      'vi-to-en': buildRandomOrderIndexes(n),
-      mixed: buildRandomOrderIndexes(n),
-      'write-word': buildRandomOrderIndexes(n)
+    const practiceCount = Array.isArray(practiceDataList) ? practiceDataList.length : 0;
+
+    setOrders((prev) => {
+      const next = { ...createDefaultOrders(), ...(prev || {}) };
+      let changed = false;
+
+      Object.keys(createDefaultOrders()).forEach((tabId) => {
+        const existing = next[tabId];
+        if (!isPermutationOrder(existing, practiceCount)) {
+          next[tabId] = practiceCount ? buildRandomOrderIndexes(practiceCount) : [];
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
     });
-  }, [practiceDataList]);
+
+    setQuizState((prev) => {
+      const next = { ...createDefaultQuizState(), ...(prev || {}) };
+      let changed = false;
+      const mcqMax = practiceCount;
+      const writeWordMax = Math.max(practiceCount - 1, 0);
+
+      mcqPracticeTabs.forEach((tabId) => {
+        const current = next[tabId] || createDefaultQuizState()[tabId];
+        const sanitizedIndex = sanitizeIndex(current.index, mcqMax);
+        if (current.index !== sanitizedIndex) {
+          next[tabId] = { ...current, index: sanitizedIndex };
+          changed = true;
+        }
+      });
+
+      const writeWordState = next['write-word'] || createDefaultQuizState()['write-word'];
+      const sanitizedWriteWordIndex = sanitizeIndex(writeWordState.index, writeWordMax);
+      if (writeWordState.index !== sanitizedWriteWordIndex) {
+        next['write-word'] = { ...writeWordState, index: sanitizedWriteWordIndex };
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+  }, [practiceDataList, setOrders, setQuizState]);
 
   useEffect(() => {
-    const nextRangeKey = `${effectiveRangeStart}:${effectiveRangeEnd}`;
+    const nextRangeKey = `${effectiveRangeStart}:${effectiveRangeEnd}:${normalizedSelectedCategories.join('|')}`;
+    if (lastAppliedRangeRef.current === null) {
+      lastAppliedRangeRef.current = nextRangeKey;
+      return;
+    }
     if (lastAppliedRangeRef.current === nextRangeKey) {
       return;
     }
@@ -382,21 +488,13 @@ export default function App() {
       review: { ...prev.review, index: 0, selected: '', checked: false, feedback: '' }
     }));
     setTranslationWords([]);
-  }, [effectiveRangeStart, effectiveRangeEnd, selectedCategory]);
+  }, [effectiveRangeStart, effectiveRangeEnd, normalizedSelectedCategories]);
 
   // quiz state
-  const [quizState, setQuizState] = useState({
-    'en-to-vi': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
-    'vi-to-en': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
-    mixed: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
-    'write-word': { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 },
-    translation: { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 },
-    review: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
-    'writing-log': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 }
-  });
+  const [quizState, setQuizState] = useLocalStorage('vocab_quiz_state', createDefaultQuizState());
 
   // disabled map for wrong choices per tab/index
-  const [disabledMap, setDisabledMap] = useState({});
+  const [disabledMap, setDisabledMap] = useLocalStorage('vocab_disabled_map', createDefaultDisabledMap());
 
   useEffect(() => {
     // fetch preview & suggest mapping when sheetUrl set (exposed as Preview button)
@@ -943,11 +1041,12 @@ export default function App() {
     if (activeTab === 'write-word') {
       const acceptable = getAcceptableAnswers(currentQuestion); // normalized list
       const isCorrect = acceptable.includes(normalizedInput);
+      const writeWordFeedback = buildWriteWordFeedback(currentQuestion);
       updateTabState(activeTab, {
         checked: true,
         feedback: isCorrect
-          ? 'Chính xác.'
-          : `Chưa đúng. Đáp án tham khảo: ${[currentQuestion.answer, currentQuestion.detail?.synonym].filter(Boolean).join(' / ')}`,
+          ? writeWordFeedback
+          : writeWordFeedback,
         score: currentTabState.score + (isCorrect ? 1 : 0),
         answered: currentTabState.answered + 1
       });
@@ -1496,24 +1595,31 @@ export default function App() {
               </div>
             </div>
             <div className="category-filter-bar">
-              <label className="category-filter-copy" htmlFor="cat-filter-select">
+              <div className="category-filter-copy">
                 <span className="category-filter-label">CAT Filter</span>
                 <strong>{visibleWordCount}/{totalWordCount} vocab</strong>
-              </label>
-              <div className="category-filter-select-wrap">
-                <select
-                  id="cat-filter-select"
-                  className="category-filter-select"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  aria-label="Vocabulary CAT filter"
-                >
-                  {categoryOptions.map((category) => (
-                    <option key={category} value={category}>
+                <span className="category-filter-summary">
+                  {isAllCategoriesSelected ? 'All categories' : normalizedSelectedCategories.join(', ')}
+                </span>
+              </div>
+              <div className="category-filter-chips" role="group" aria-label="Vocabulary CAT filter">
+                {categoryOptions.map((category) => {
+                  const isActive = category === CATEGORY_ALL
+                    ? isAllCategoriesSelected
+                    : normalizedSelectedCategories.includes(category);
+
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      className={`category-chip ${isActive ? 'active' : ''}`}
+                      onClick={() => toggleCategory(category)}
+                      aria-pressed={isActive}
+                    >
                       {category}
-                    </option>
-                  ))}
-                </select>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1677,7 +1783,7 @@ export default function App() {
         </section>
 
         <section className="practice-grid">
-          <article className="question-card">
+          <article className={`question-card ${activeTab === 'write-word' ? 'write-word-card' : ''}`}>
             <div className="card-header">
               <div>
                 <span className="chip">
@@ -1869,7 +1975,7 @@ export default function App() {
                 )}
 
                 <div
-                  className="prompt-box"
+                  className={`prompt-box ${activeTab === 'write-word' ? 'write-word-prompt-box' : ''}`}
                   onMouseEnter={() => {
                     const questionTarget = currentQuestion?.detail?.vocabulary || currentQuestion?.detail?.vietnamMeaning || null;
                     if (questionTarget) setHoveredOption(questionTarget);
@@ -1938,7 +2044,7 @@ export default function App() {
                     />
                   </div>
                 ) : activeTab === 'write-word' ? (
-                  <div className="translation-area">
+                  <div className="translation-area write-word-area">
                     <textarea
                       value={currentTabState.input}
                       onChange={(e) => updateTabState('write-word', { input: e.target.value })}
@@ -1996,13 +2102,13 @@ export default function App() {
                      })}
                    </div>
                  )}
-                {currentTabState.feedback ? (
-                  <div className={`feedback-box show ${/^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error'} ${isMcqTab ? 'mcq-feedback' : ''}`}>
-                    {currentTabState.feedback}
-                  </div>
-                ) : null}
+	                {currentTabState.feedback ? (
+	                  <div className={`feedback-box show ${activeTab === 'write-word' ? 'write-word-feedback success' : /^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error'} ${isMcqTab ? 'mcq-feedback' : ''}`}>
+	                    {currentTabState.feedback}
+	                  </div>
+	                ) : null}
 
-                <div className="actions">
+	                <div className={`actions ${activeTab === 'write-word' ? 'write-word-actions' : ''}`}>
                   <button className="secondary-button" onClick={handleNext}>Next →</button>
                   {isMcqTab && (
                     <div className="library-progress desktop-library-progress">
@@ -2023,7 +2129,7 @@ export default function App() {
                   ) : null}
                 </div>
 
-                <div className="data-structure learn-panel">
+	                <div className={`data-structure learn-panel ${activeTab === 'write-word' ? 'write-word-learn-panel' : ''}`}>
                   <span className="info-label">Learn column (for current word)</span>
                   {hoverDetail ? (
                     <div>
