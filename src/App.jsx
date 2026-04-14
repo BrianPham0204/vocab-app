@@ -142,13 +142,13 @@ const createDefaultOrders = () => ({
 });
 
 const createDefaultQuizState = () => ({
-  'en-to-vi': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
-  'vi-to-en': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
-  mixed: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
-  'write-word': { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 },
-  translation: { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 },
-  review: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 },
-  'writing-log': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 }
+  'en-to-vi': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0, lastResultCorrect: null },
+  'vi-to-en': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0, lastResultCorrect: null },
+  mixed: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0, lastResultCorrect: null },
+  'write-word': { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0, lastResultCorrect: null },
+  translation: { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0, lastResultCorrect: null },
+  review: { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0, lastResultCorrect: null },
+  'writing-log': { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0, lastResultCorrect: null }
 });
 
 const createDefaultDisabledMap = () => ({});
@@ -964,7 +964,8 @@ export default function App() {
         checked: true,
         feedback: 'Chính xác.',
         score: currentTabState.score + 1,
-        answered: currentTabState.answered + 1
+        answered: currentTabState.answered + 1,
+        lastResultCorrect: true
       });
       if (shouldRemoveWhenCorrectInReview) {
         setPendingReviewRemoval({
@@ -987,7 +988,8 @@ export default function App() {
       setPendingReviewRemoval(null);
       updateTabState(activeTab, {
         feedback: `Sai. Đáp án đúng: ${currentQuestion.answer}`,
-        answered: currentTabState.answered + 1
+        answered: currentTabState.answered + 1,
+        lastResultCorrect: false
       });
       if (shouldTrackWrongInReview) {
         upsertReviewEntry({
@@ -1038,7 +1040,8 @@ export default function App() {
       if (!trimmed) {
         updateTabState('translation', {
           checked: true,
-          feedback: 'Hãy viết đoạn văn trước khi Confirm.'
+          feedback: 'Hãy viết đoạn văn trước khi Confirm.',
+          lastResultCorrect: false
         });
         return;
       }
@@ -1053,7 +1056,8 @@ export default function App() {
       updateTabState('translation', {
         input: '',
         checked: true,
-        feedback: 'Đã lưu vào Writing Log.'
+        feedback: 'Đã lưu vào Writing Log.',
+        lastResultCorrect: true
       });
       refreshTranslationWords(translationWordCount);
       return;
@@ -1070,7 +1074,8 @@ export default function App() {
           ? writeWordFeedback
           : writeWordFeedback,
         score: currentTabState.score + (isCorrect ? 1 : 0),
-        answered: currentTabState.answered + 1
+        answered: currentTabState.answered + 1,
+        lastResultCorrect: isCorrect
       });
       if (isCorrect && shouldRemoveWhenCorrectInReview) {
         setPendingReviewRemoval({
@@ -1106,7 +1111,8 @@ export default function App() {
         ? 'Chính xác.'
         : `Chưa đúng. Đáp án tham khảo: ${currentTabState.answer}`,
       score: currentTabState.score + (isCorrect ? 1 : 0),
-      answered: currentTabState.answered + 1
+      answered: currentTabState.answered + 1,
+      lastResultCorrect: isCorrect
     });
     if (!isCorrect && shouldTrackWrongInReview) {
       upsertReviewEntry({
@@ -1156,7 +1162,7 @@ export default function App() {
       const len = (practiceDataList && practiceDataList.length) || 1;
       const newIndex = (quizState[activeTab].index + 1) % len;
       shouldRefocusWriteWordRef.current = true;
-      updateTabState(activeTab, { index: newIndex, input: '', checked: false, feedback: '' });
+    updateTabState(activeTab, { index: newIndex, input: '', checked: false, feedback: '', lastResultCorrect: null });
       clearDisabledForIndex(activeTab, newIndex);
       return;
     }
@@ -1164,7 +1170,7 @@ export default function App() {
     const newIndex = mcqPracticeTabs.includes(activeTab)
       ? Math.min(currentTabState.index + 1, len)
       : ((currentTabState.index + 1) % (len || 1));
-    updateTabState(activeTab, { index: newIndex, selected: '', checked: false, feedback: '' });
+    updateTabState(activeTab, { index: newIndex, selected: '', checked: false, feedback: '', lastResultCorrect: null });
     clearDisabledForIndex(activeTab, newIndex);
   };
 
@@ -1283,21 +1289,21 @@ export default function App() {
     // wrap backwards
     if (activeTab === 'translation') {
       refreshTranslationWords(translationWordCount);
-      updateTabState(activeTab, { input: '', checked: false, feedback: '' });
+      updateTabState(activeTab, { input: '', checked: false, feedback: '', lastResultCorrect: null });
       return;
     }
     if (activeTab === 'write-word') {
       const len = (practiceDataList && practiceDataList.length) || 1;
       const newIndex = (quizState[activeTab].index - 1 + len) % len;
       shouldRefocusWriteWordRef.current = true;
-      updateTabState(activeTab, { index: newIndex, input: '', checked: false, feedback: '' });
+      updateTabState(activeTab, { index: newIndex, input: '', checked: false, feedback: '', lastResultCorrect: null });
       return;
     }
     const len = (orders[activeTab] && orders[activeTab].length) || (practiceDataList && practiceDataList.length) || 0;
     const newIndex = mcqPracticeTabs.includes(activeTab)
       ? Math.max(currentTabState.index - 1, 0)
       : ((currentTabState.index - 1 + (len || 1)) % (len || 1));
-    updateTabState(activeTab, { index: newIndex, selected: '', checked: false, feedback: '' });
+    updateTabState(activeTab, { index: newIndex, selected: '', checked: false, feedback: '', lastResultCorrect: null });
   };
 
   const handleResetLibrary = () => {
@@ -1328,17 +1334,17 @@ export default function App() {
     setPendingReviewRemoval(null);
     if (activeTab === 'translation') {
       refreshTranslationWords(translationWordCount);
-      updateTabState(activeTab, { input: '', checked: false, feedback: '', score: 0, answered: 0 });
+      updateTabState(activeTab, { input: '', checked: false, feedback: '', score: 0, answered: 0, lastResultCorrect: null });
       setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
       return;
     }
     if (activeTab === 'write-word') {
       shouldRefocusWriteWordRef.current = true;
-      updateTabState(activeTab, { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 });
+      updateTabState(activeTab, { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0, lastResultCorrect: null });
       setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
       return;
     }
-    updateTabState(activeTab, { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0 });
+    updateTabState(activeTab, { index: 0, selected: '', checked: false, feedback: '', score: 0, answered: 0, lastResultCorrect: null });
     setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
   };
 
@@ -1383,10 +1389,10 @@ export default function App() {
     if (!isPracticeTab) return;
 
     if (activeTab === 'write-word') {
-      updateTabState(activeTab, { index: 0, input: '', checked: false, feedback: '' });
+      updateTabState(activeTab, { index: 0, input: '', checked: false, feedback: '', lastResultCorrect: null });
       return;
     }
-    updateTabState(activeTab, { index: 0, selected: '', checked: false, feedback: '' });
+    updateTabState(activeTab, { index: 0, selected: '', checked: false, feedback: '', lastResultCorrect: null });
   };
 
   // sheet preview & mapping
@@ -2129,7 +2135,9 @@ export default function App() {
                    </div>
                  )}
 	                {currentTabState.feedback ? (
-	                  <div className={`feedback-box show ${activeTab === 'write-word' ? 'write-word-feedback success' : /^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error'} ${isMcqTab ? 'mcq-feedback' : ''}`}>
+	                  <div className={`feedback-box show ${activeTab === 'write-word'
+                      ? `write-word-feedback ${currentTabState.lastResultCorrect ? 'success' : 'error'}`
+                      : /^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error'} ${isMcqTab ? 'mcq-feedback' : ''}`}>
 	                    {currentTabState.feedback}
 	                  </div>
 	                ) : null}
