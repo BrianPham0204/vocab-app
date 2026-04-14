@@ -250,6 +250,8 @@ export default function App() {
   const [translationWordCount, setTranslationWordCount] = useState(5);
   const [translationWords, setTranslationWords] = useState([]);
   const [pendingReviewRemoval, setPendingReviewRemoval] = useState(null);
+  const [quizState, setQuizState] = useLocalStorage('vocab_quiz_state', createDefaultQuizState());
+  const [disabledMap, setDisabledMap] = useLocalStorage('vocab_disabled_map', createDefaultDisabledMap());
   const normalizedDataList = useMemo(() => attachWordOrder(dataList), [dataList]);
   const rawRangeStart = clampPositiveInteger(wordRange?.start);
   const rawRangeEnd = clampPositiveInteger(wordRange?.end);
@@ -489,12 +491,6 @@ export default function App() {
     }));
     setTranslationWords([]);
   }, [effectiveRangeStart, effectiveRangeEnd, normalizedSelectedCategories]);
-
-  // quiz state
-  const [quizState, setQuizState] = useLocalStorage('vocab_quiz_state', createDefaultQuizState());
-
-  // disabled map for wrong choices per tab/index
-  const [disabledMap, setDisabledMap] = useLocalStorage('vocab_disabled_map', createDefaultDisabledMap());
 
   useEffect(() => {
     // fetch preview & suggest mapping when sheetUrl set (exposed as Preview button)
