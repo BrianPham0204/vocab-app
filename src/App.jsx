@@ -279,6 +279,8 @@ export default function App() {
   const savedToastTimerRef = useRef(null);
   const sourceSlapTimerRef = useRef(null);
   const lastAppliedRangeRef = useRef(null);
+  const writeWordInputRef = useRef(null);
+  const shouldRefocusWriteWordRef = useRef(false);
   
   const reviewSourceData = useMemo(() => {
     const list = Array.isArray(reviewList) ? reviewList : [];
@@ -615,6 +617,30 @@ export default function App() {
     // only suppress immediate onMouseEnter events from remounted buttons
     ignoreHoverUntilRef.current = Date.now() + 300;
   }, [currentQuestion?.id]);
+
+  useEffect(() => {
+    if (activeTab !== 'write-word' || !shouldRefocusWriteWordRef.current) return;
+
+    shouldRefocusWriteWordRef.current = false;
+    const focusTarget = () => {
+      const el = writeWordInputRef.current;
+      if (!el) return;
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        el.focus();
+      }
+      const valueLength = String(el.value || '').length;
+      try {
+        el.setSelectionRange(valueLength, valueLength);
+      } catch {
+        // ignore selection API issues on some mobile browsers
+      }
+    };
+
+    const frame = window.requestAnimationFrame(focusTarget);
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, currentQuestion?.id]);
   
   const updateTabState = (tabId, partial) => {
     setQuizState((prev) => ({
@@ -1129,6 +1155,7 @@ export default function App() {
     if (activeTab === 'write-word') {
       const len = (practiceDataList && practiceDataList.length) || 1;
       const newIndex = (quizState[activeTab].index + 1) % len;
+      shouldRefocusWriteWordRef.current = true;
       updateTabState(activeTab, { index: newIndex, input: '', checked: false, feedback: '' });
       clearDisabledForIndex(activeTab, newIndex);
       return;
@@ -1262,6 +1289,7 @@ export default function App() {
     if (activeTab === 'write-word') {
       const len = (practiceDataList && practiceDataList.length) || 1;
       const newIndex = (quizState[activeTab].index - 1 + len) % len;
+      shouldRefocusWriteWordRef.current = true;
       updateTabState(activeTab, { index: newIndex, input: '', checked: false, feedback: '' });
       return;
     }
@@ -1305,6 +1333,7 @@ export default function App() {
       return;
     }
     if (activeTab === 'write-word') {
+      shouldRefocusWriteWordRef.current = true;
       updateTabState(activeTab, { index: 0, input: '', checked: false, feedback: '', score: 0, answered: 0 });
       setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
       return;
@@ -2042,6 +2071,7 @@ export default function App() {
                 ) : activeTab === 'write-word' ? (
                   <div className="translation-area write-word-area">
                     <textarea
+                      ref={writeWordInputRef}
                       value={currentTabState.input}
                       onChange={(e) => updateTabState('write-word', { input: e.target.value })}
                       onKeyDown={(e) => {
@@ -2105,7 +2135,13 @@ export default function App() {
 	                ) : null}
 
 	                <div className={`actions ${activeTab === 'write-word' ? 'write-word-actions' : ''}`}>
-                  <button className="secondary-button" onClick={handleNext}>Next →</button>
+                  <button
+                    className="secondary-button"
+                    onPointerDown={activeTab === 'write-word' ? (e) => e.preventDefault() : undefined}
+                    onClick={handleNext}
+                  >
+                    Next →
+                  </button>
                   {isMcqTab && (
                     <div className="library-progress desktop-library-progress">
                       <div className="library-progress-item">
@@ -2121,7 +2157,13 @@ export default function App() {
                   {activeTab === 'translation' ? (
                     <button className="primary-button" onClick={handleCheck}>Confirm</button>
                   ) : activeTab === 'write-word' ? (
-                    <button className="ghost-button" onClick={handleReset}>Reset</button>
+                    <button
+                      className="ghost-button"
+                      onPointerDown={(e) => e.preventDefault()}
+                      onClick={handleReset}
+                    >
+                      Reset
+                    </button>
                   ) : null}
                 </div>
 
