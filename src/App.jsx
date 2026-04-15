@@ -281,6 +281,7 @@ export default function App() {
   const lastAppliedRangeRef = useRef(null);
   const writeWordInputRef = useRef(null);
   const shouldRefocusWriteWordRef = useRef(false);
+  const shouldAutoSpeakNextRef = useRef(false);
   
   const reviewSourceData = useMemo(() => {
     const list = Array.isArray(reviewList) ? reviewList : [];
@@ -870,6 +871,10 @@ export default function App() {
     }
   };
 
+  const toggleVoiceEnabled = () => {
+    setVoiceEnabled((prev) => !prev);
+  };
+
   const upsertReviewEntry = (entry) => {
     const detail = entry?.detail || null;
     const vocabulary = String(detail?.vocabulary || entry?.answer || entry?.word || '').trim();
@@ -1149,6 +1154,7 @@ export default function App() {
       setPendingReviewRemoval(null);
     }
     setHoveredOption(null);
+    shouldAutoSpeakNextRef.current = !!voiceEnabled;
     if (isPracticeTab && practiceSource === 'review') {
       clearDisabledForTab(activeTab);
     }
@@ -1550,11 +1556,25 @@ export default function App() {
   }, [activeTab, currentQuestion, renderPromptText]);
   const currentPromptWord = mobilePromptContent.primary;
   const currentPromptExample = mobilePromptContent.secondary;
+  const currentPromptSynonym = String(currentQuestion?.detail?.synonym || '').trim();
   const currentVoiceText = String(
     currentQuestion?.detail?.vocabulary
     || currentQuestion?.answer
     || ''
   ).trim();
+  
+  useEffect(() => {
+    if (!shouldAutoSpeakNextRef.current) return;
+    shouldAutoSpeakNextRef.current = false;
+    if (!currentVoiceText) return;
+
+    const timer = window.setTimeout(() => {
+      speak(currentVoiceText, 'en-US');
+    }, 30);
+
+    return () => window.clearTimeout(timer);
+  }, [currentQuestion?.id, currentVoiceText]);
+
   const reviewItems = [...filteredReviewData].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
   const writingLogItems = [...(writingLogList || [])].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
   const activeGroupLabel = groupedTabs.find((t) => t.id === activeGroup)?.label || '';
@@ -1976,18 +1996,20 @@ export default function App() {
               </div>
             ) : (
               <>
-                {isMcqTab && (
+                {(isMcqTab || activeTab === 'write-word') && (
                   <div className="mobile-practice-top">
-                    <div className="library-progress mobile-library-progress">
-                      <div className="library-progress-item">
-                        <span>Learned</span>
-                        <strong>{learnedCount}</strong>
+                    {isMcqTab ? (
+                      <div className="library-progress mobile-library-progress">
+                        <div className="library-progress-item">
+                          <span>Learned</span>
+                          <strong>{learnedCount}</strong>
+                        </div>
+                        <div className="library-progress-item">
+                          <span>Remain</span>
+                          <strong>{remainCount}</strong>
+                        </div>
                       </div>
-                      <div className="library-progress-item">
-                        <span>Remain</span>
-                        <strong>{remainCount}</strong>
-                      </div>
-                    </div>
+                    ) : null}
                     <button
                       type="button"
                       className="mobile-voice-button"
@@ -2001,6 +2023,18 @@ export default function App() {
                         <path d="M16.5 8.5a5 5 0 0 1 0 7" />
                         <path d="M19 6a8.5 8.5 0 0 1 0 12" />
                       </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className={`mobile-voice-toggle ${voiceEnabled ? 'is-on' : 'is-off'}`}
+                      onClick={toggleVoiceEnabled}
+                      role="switch"
+                      aria-checked={voiceEnabled}
+                      aria-label={`Voice auto next ${voiceEnabled ? 'on' : 'off'}`}
+                      title={voiceEnabled ? 'Auto đọc khi Next: On' : 'Auto đọc khi Next: Off'}
+                    >
+                      <span>Auto Voice</span>
+                      <strong>{voiceEnabled ? 'On' : 'Off'}</strong>
                     </button>
                   </div>
                 )}
@@ -2019,14 +2053,64 @@ export default function App() {
                   <span className="prompt-label">
                     {activeTab === 'translation' ? 'Đề bài' : 'Câu hỏi'}
                   </span>
+                  {(isMcqTab || activeTab === 'write-word') ? (
+                    <div className="prompt-toolbar">
+                      <div className="voice-toggle-group">
+                        <span className="voice-toggle-label">Voice Auto Next</span>
+                        <button
+                          type="button"
+                          className={`voice-toggle ${voiceEnabled ? 'is-on' : 'is-off'}`}
+                          onClick={toggleVoiceEnabled}
+                          role="switch"
+                          aria-checked={voiceEnabled}
+                          aria-label={`Voice auto next ${voiceEnabled ? 'on' : 'off'}`}
+                          title={voiceEnabled ? 'Auto đọc từ khi bấm Next đang bật' : 'Auto đọc từ khi bấm Next đang tắt'}
+                        >
+                          <span className="voice-toggle-track">
+                            <span className="voice-toggle-thumb" />
+                          </span>
+                          <span className="voice-toggle-text">{voiceEnabled ? 'On' : 'Off'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="desktop-prompt-text">
                     <p>{renderPromptText()}</p>
+                    {(currentPromptSynonym || currentPromptExample) ? (
+                      <div className="prompt-meta-list">
+                        {currentPromptSynonym ? (
+                          <div className="prompt-meta-item">
+                            <span className="prompt-meta-label">Synonym</span>
+                            <p>{currentPromptSynonym}</p>
+                          </div>
+                        ) : null}
+                        {currentPromptExample ? (
+                          <div className="prompt-meta-item">
+                            <span className="prompt-meta-label">Example</span>
+                            <p>{currentPromptExample}</p>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                   {isMcqTab || activeTab === 'write-word' ? (
                     <div className="mobile-prompt-body">
                       <p className="mobile-prompt-word">{currentPromptWord || renderPromptText()}</p>
-                      {currentPromptExample ? (
-                        <p className="mobile-prompt-example">{currentPromptExample}</p>
+                      {(currentPromptSynonym || currentPromptExample) ? (
+                        <div className="prompt-meta-list mobile-prompt-meta-list">
+                          {currentPromptSynonym ? (
+                            <div className="prompt-meta-item">
+                              <span className="prompt-meta-label">Synonym</span>
+                              <p>{currentPromptSynonym}</p>
+                            </div>
+                          ) : null}
+                          {currentPromptExample ? (
+                            <div className="prompt-meta-item">
+                              <span className="prompt-meta-label">Example</span>
+                              <p className="mobile-prompt-example">{currentPromptExample}</p>
+                            </div>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   ) : null}
