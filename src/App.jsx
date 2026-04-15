@@ -1679,6 +1679,26 @@ export default function App() {
         {settingsOpen && (
           <section className="settings-panel" style={{ marginBottom: 18 }}>
             <h3>Data Source / Google Sheets</h3>
+            <div className="settings-voice-row">
+              <div>
+                <h4>Auto Voice</h4>
+                <p className="settings-voice-copy">Bật để mỗi lần bấm Next app tự đọc vocabulary. Tắt thì dùng nút loa hoặc phím v.</p>
+              </div>
+              <button
+                type="button"
+                className={`voice-toggle ${voiceEnabled ? 'is-on' : 'is-off'}`}
+                onClick={toggleVoiceEnabled}
+                role="switch"
+                aria-checked={voiceEnabled}
+                aria-label={`Voice auto next ${voiceEnabled ? 'on' : 'off'}`}
+                title={voiceEnabled ? 'Auto đọc từ khi bấm Next đang bật' : 'Auto đọc từ khi bấm Next đang tắt'}
+              >
+                <span className="voice-toggle-track">
+                  <span className="voice-toggle-thumb" />
+                </span>
+                <span className="voice-toggle-text">{voiceEnabled ? 'On' : 'Off'}</span>
+              </button>
+            </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input style={{ flex: 1 }} placeholder="Paste Google Sheet URL (or CSV URL)" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} />
               <button onClick={fetchSheetPreview} className="primary-button">Preview</button>
@@ -2024,18 +2044,6 @@ export default function App() {
                         <path d="M19 6a8.5 8.5 0 0 1 0 12" />
                       </svg>
                     </button>
-                    <button
-                      type="button"
-                      className={`mobile-voice-toggle ${voiceEnabled ? 'is-on' : 'is-off'}`}
-                      onClick={toggleVoiceEnabled}
-                      role="switch"
-                      aria-checked={voiceEnabled}
-                      aria-label={`Voice auto next ${voiceEnabled ? 'on' : 'off'}`}
-                      title={voiceEnabled ? 'Auto đọc khi Next: On' : 'Auto đọc khi Next: Off'}
-                    >
-                      <span>Auto Voice</span>
-                      <strong>{voiceEnabled ? 'On' : 'Off'}</strong>
-                    </button>
                   </div>
                 )}
 
@@ -2053,42 +2061,15 @@ export default function App() {
                   <span className="prompt-label">
                     {activeTab === 'translation' ? 'Đề bài' : 'Câu hỏi'}
                   </span>
-                  {(isMcqTab || activeTab === 'write-word') ? (
-                    <div className="prompt-toolbar">
-                      <div className="voice-toggle-group">
-                        <span className="voice-toggle-label">Voice Auto Next</span>
-                        <button
-                          type="button"
-                          className={`voice-toggle ${voiceEnabled ? 'is-on' : 'is-off'}`}
-                          onClick={toggleVoiceEnabled}
-                          role="switch"
-                          aria-checked={voiceEnabled}
-                          aria-label={`Voice auto next ${voiceEnabled ? 'on' : 'off'}`}
-                          title={voiceEnabled ? 'Auto đọc từ khi bấm Next đang bật' : 'Auto đọc từ khi bấm Next đang tắt'}
-                        >
-                          <span className="voice-toggle-track">
-                            <span className="voice-toggle-thumb" />
-                          </span>
-                          <span className="voice-toggle-text">{voiceEnabled ? 'On' : 'Off'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
                   <div className="desktop-prompt-text">
                     <p>{renderPromptText()}</p>
                     {(currentPromptSynonym || currentPromptExample) ? (
-                      <div className="prompt-meta-list">
+                      <div className="prompt-support-lines">
                         {currentPromptSynonym ? (
-                          <div className="prompt-meta-item">
-                            <span className="prompt-meta-label">Synonym</span>
-                            <p>{currentPromptSynonym}</p>
-                          </div>
+                          <p className="prompt-support-line prompt-support-synonym">{currentPromptSynonym}</p>
                         ) : null}
                         {currentPromptExample ? (
-                          <div className="prompt-meta-item">
-                            <span className="prompt-meta-label">Example</span>
-                            <p>{currentPromptExample}</p>
-                          </div>
+                          <p className="prompt-support-line prompt-support-example">{currentPromptExample}</p>
                         ) : null}
                       </div>
                     ) : null}
@@ -2097,18 +2078,12 @@ export default function App() {
                     <div className="mobile-prompt-body">
                       <p className="mobile-prompt-word">{currentPromptWord || renderPromptText()}</p>
                       {(currentPromptSynonym || currentPromptExample) ? (
-                        <div className="prompt-meta-list mobile-prompt-meta-list">
+                        <div className="prompt-support-lines mobile-prompt-support-lines">
                           {currentPromptSynonym ? (
-                            <div className="prompt-meta-item">
-                              <span className="prompt-meta-label">Synonym</span>
-                              <p>{currentPromptSynonym}</p>
-                            </div>
+                            <p className="prompt-support-line prompt-support-synonym">{currentPromptSynonym}</p>
                           ) : null}
                           {currentPromptExample ? (
-                            <div className="prompt-meta-item">
-                              <span className="prompt-meta-label">Example</span>
-                              <p className="mobile-prompt-example">{currentPromptExample}</p>
-                            </div>
+                            <p className="prompt-support-line prompt-support-example mobile-prompt-example">{currentPromptExample}</p>
                           ) : null}
                         </div>
                       ) : null}
