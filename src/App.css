@@ -600,6 +600,8 @@ input {
 
 .prompt-support-synonym {
   color: #315542;
+  font-size: 0.92rem;
+  font-style: italic;
 }
 
 .prompt-support-example {
