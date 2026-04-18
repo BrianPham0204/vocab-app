@@ -2199,7 +2199,9 @@ export default function App() {
                       : /^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error'} ${isMcqTab ? 'mcq-feedback' : ''}`}
                     aria-live="polite"
                   >
-	                    {currentTabState.feedback || '\u00A0'}
+                    <span className="feedback-content">
+	                      {currentTabState.feedback || '\u00A0'}
+                    </span>
 	                  </div>
 
 	                <div className={`actions ${activeTab === 'write-word' ? 'write-word-actions' : ''}`}>
@@ -2237,6 +2239,7 @@ export default function App() {
 
 	                <div className={`data-structure learn-panel ${activeTab === 'write-word' ? 'write-word-learn-panel' : ''}`}>
                   <span className="info-label">Learn column (for current word)</span>
+                  <div className="learn-panel-content">
                   {hoverDetail ? (
                     <div>
                       {hoverDetail.learn ? (
@@ -2265,6 +2268,7 @@ export default function App() {
                       </p>
                     </div>
                   )}
+                  </div>
                 </div>
               </>
             )}

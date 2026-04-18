@@ -959,14 +959,17 @@ input {
   color: #2e4d3b;
   display: flex;
   align-items: center;
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 0.18s ease;
 }
 
-.feedback-box.show {
-  visibility: visible;
+.feedback-content {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.feedback-box.show .feedback-content {
   opacity: 1;
+  transform: translateY(0);
 }
 
 .feedback-box.success {
@@ -1069,6 +1072,14 @@ input {
 
 .learn-panel {
   margin-top: 16px;
+  min-height: 172px;
+}
+
+.learn-panel-content {
+  min-height: 108px;
+  max-height: 108px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .example-text {
