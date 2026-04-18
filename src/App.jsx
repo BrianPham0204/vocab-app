@@ -2195,8 +2195,10 @@ export default function App() {
                  )}
 	                <div
                     className={`feedback-box ${currentTabState.feedback ? 'show' : ''} ${activeTab === 'write-word'
-                      ? `write-word-feedback ${currentTabState.lastResultCorrect ? 'success' : 'error'}`
-                      : /^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error'} ${isMcqTab ? 'mcq-feedback' : ''}`}
+                      ? `write-word-feedback ${currentTabState.feedback ? (currentTabState.lastResultCorrect ? 'success' : 'error') : ''}`
+                      : currentTabState.feedback
+                        ? (/^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error')
+                        : ''} ${isMcqTab ? 'mcq-feedback' : ''}`}
                     aria-live="polite"
                   >
                     <span className="feedback-content">
