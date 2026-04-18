@@ -2193,13 +2193,14 @@ export default function App() {
                      })}
                    </div>
                  )}
-	                {currentTabState.feedback ? (
-	                  <div className={`feedback-box show ${activeTab === 'write-word'
+	                <div
+                    className={`feedback-box ${currentTabState.feedback ? 'show' : ''} ${activeTab === 'write-word'
                       ? `write-word-feedback ${currentTabState.lastResultCorrect ? 'success' : 'error'}`
-                      : /^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error'} ${isMcqTab ? 'mcq-feedback' : ''}`}>
-	                    {currentTabState.feedback}
+                      : /^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error'} ${isMcqTab ? 'mcq-feedback' : ''}`}
+                    aria-live="polite"
+                  >
+	                    {currentTabState.feedback || '\u00A0'}
 	                  </div>
-	                ) : null}
 
 	                <div className={`actions ${activeTab === 'write-word' ? 'write-word-actions' : ''}`}>
                   <button

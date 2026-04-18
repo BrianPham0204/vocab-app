@@ -952,10 +952,21 @@ input {
 
 .feedback-box {
   margin-top: 18px;
+  min-height: 52px;
   padding: 14px 16px;
   background: #f2fbf4;
   border: 1px solid #d9eddc;
   color: #2e4d3b;
+  display: flex;
+  align-items: center;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.feedback-box.show {
+  visibility: visible;
+  opacity: 1;
 }
 
 .feedback-box.success {
