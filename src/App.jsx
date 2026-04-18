@@ -2062,7 +2062,7 @@ export default function App() {
                     {activeTab === 'translation' ? 'Đề bài' : 'Câu hỏi'}
                   </span>
                   <div className="desktop-prompt-text">
-                    <p>{renderPromptText()}</p>
+                    <p className="desktop-prompt-word">{currentPromptWord || renderPromptText()}</p>
                     {(currentPromptSynonym || currentPromptExample) ? (
                       <div className="prompt-support-lines">
                         {currentPromptSynonym ? (
