@@ -11,15 +11,15 @@ export function useLocalStorage(key, initialValue) {
   });
 
   const setValue = (v) => {
-    try {
-      setState((prev) => {
-        const valueToStore = typeof v === 'function' ? v(prev) : v;
+    setState((prev) => {
+      const valueToStore = typeof v === 'function' ? v(prev) : v;
+      try {
         localStorage.setItem(key, JSON.stringify(valueToStore));
-        return valueToStore;
-      });
-    } catch (e) {
-      console.error('useLocalStorage set error', e);
-    }
+      } catch (e) {
+        console.warn(`useLocalStorage persist error for ${key}`, e);
+      }
+      return valueToStore;
+    });
   };
 
   return [state, setValue];

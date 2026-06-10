@@ -1575,7 +1575,7 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [currentQuestion?.id, currentVoiceText]);
 
-  const reviewItems = [...filteredReviewData].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
+  const reviewItems = [...(Array.isArray(reviewList) ? reviewList : [])].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
   const writingLogItems = [...(writingLogList || [])].sort((a, b) => (b?.ts || 0) - (a?.ts || 0));
   const activeGroupLabel = groupedTabs.find((t) => t.id === activeGroup)?.label || '';
   const activeModeLabel = activeGroup === 'mcq'
