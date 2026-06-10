@@ -871,6 +871,28 @@ export default function App() {
     }
   };
 
+  const detectSpeechLang = (text) => {
+    const value = String(text || '');
+    if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(value)) {
+      return 'vi-VN';
+    }
+    return 'en-US';
+  };
+
+  const getSelectedTextFromTarget = (target) => {
+    const tag = target && target.tagName && String(target.tagName).toLowerCase();
+    const canHaveSelection = tag === 'textarea'
+      || (tag === 'input' && ['text', 'search', 'url', 'email', 'tel', 'password'].includes(String(target.type || 'text').toLowerCase()));
+
+    if (canHaveSelection && typeof target.selectionStart === 'number' && typeof target.selectionEnd === 'number') {
+      const selected = String(target.value || '').slice(target.selectionStart, target.selectionEnd).trim();
+      if (selected) return selected;
+    }
+
+    const selection = window.getSelection();
+    return String(selection?.toString() || '').trim();
+  };
+
   const toggleVoiceEnabled = () => {
     setVoiceEnabled((prev) => !prev);
   };
@@ -1229,7 +1251,13 @@ export default function App() {
       }
 
       if (key && key.toLowerCase() === 'v') {
-        if (isEditable) return; // avoid speaking while typing
+        const selectedText = getSelectedTextFromTarget(tgt);
+        if (selectedText) {
+          e.preventDefault();
+          try { speak(selectedText, detectSpeechLang(selectedText)); } catch (err) { /* ignore */ }
+          return;
+        }
+        if (isEditable) return; // avoid speaking while typing unless text is selected
         e.preventDefault();
         const displayed = hoverDetail?.vocabulary || hoverDetail?.vietnamMeaning || currentQuestion?.detail?.vocabulary || currentQuestion?.vocabulary || '';
         if (displayed) {
