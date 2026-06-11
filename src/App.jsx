@@ -26,7 +26,7 @@ const libraryModes = [
   { id: 'review', label: 'Review' },
   { id: 'writing-log', label: 'Writing Log' }
 ];
-const practiceTabs = ['en-to-vi', 'vi-to-en', 'mixed', 'write-word'];
+const practiceTabs = ['en-to-vi', 'vi-to-en', 'mixed', 'write-word', 'translation'];
 const SCHEMA_FIELDS = [
   { key: 'vocabulary', label: 'Vocabulary', hint: 'Tu vung chinh' },
   { key: 'cat', label: 'CAT', hint: 'Nhom / loai de loc vocab' },
@@ -392,13 +392,16 @@ export default function App() {
     setPendingReviewRemoval(null);
     setHoveredOption(null);
     setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
-    updateTabState(activeTab, activeTab === 'write-word'
+    updateTabState(activeTab, (activeTab === 'write-word' || activeTab === 'translation')
       ? { index: 0, input: '', checked: false, feedback: '' }
       : { index: 0, selected: '', checked: false, feedback: '' });
+    if (activeTab === 'translation') {
+      setTranslationWords([]);
+    }
   }, [activeTab, isPracticeTab, practiceSource, reviewSourceData.length]);
 
   const pickRandomVocabularyWords = (count) => {
-    const pool = filteredVocabularyData
+    const pool = practiceDataList
       .map((it) => String(it?.vocabulary || '').trim())
       .filter(Boolean);
     const uniquePool = Array.from(new Set(pool));
@@ -419,11 +422,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!translationWords.length && filteredVocabularyData.length) {
+    if (activeTab === 'translation' && !translationWords.length && practiceDataList.length) {
       setTranslationWords(pickRandomVocabularyWords(translationWordCount));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredVocabularyData]);
+  }, [activeTab, practiceDataList, practiceSource]);
 
   // keep persisted quiz progress compatible with the current dataset/filter
   useEffect(() => {
@@ -1421,6 +1424,12 @@ export default function App() {
     setHoveredOption(null);
     setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
     if (!isPracticeTab) return;
+
+    if (activeTab === 'translation') {
+      setTranslationWords([]);
+      updateTabState(activeTab, { input: '', checked: false, feedback: '', lastResultCorrect: null });
+      return;
+    }
 
     if (activeTab === 'write-word') {
       updateTabState(activeTab, { index: 0, input: '', checked: false, feedback: '', lastResultCorrect: null });
