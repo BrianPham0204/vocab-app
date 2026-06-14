@@ -9,7 +9,8 @@ export async function requestTranslation({
     throw new Error('Missing translation endpoint.');
   }
 
-  const response = await fetch(endpoint, {
+  const resolvedEndpoint = resolveTranslationEndpoint(endpoint);
+  const response = await fetch(resolvedEndpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -46,4 +47,17 @@ export async function requestTranslation({
     translatedText: String(translatedText).trim(),
     provider: json?.provider || 'api'
   };
+}
+
+function resolveTranslationEndpoint(endpoint) {
+  const value = String(endpoint || '').trim();
+  if (
+    value === '/api/translate'
+    && typeof window !== 'undefined'
+    && ['127.0.0.1', 'localhost'].includes(window.location.hostname)
+    && window.location.port !== '4310'
+  ) {
+    return 'http://127.0.0.1:4310/api/translate';
+  }
+  return value;
 }

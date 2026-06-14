@@ -395,14 +395,37 @@ input {
 }
 
 .translation-header-controls {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  width: 100%;
 }
 
 .translation-header-controls input {
-  width: 72px;
+  width: 58px;
+  padding: 7px 9px;
+}
+
+.translation-header-controls .ghost-button {
+  border-radius: 12px;
+  padding: 7px 11px;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.writing-source-stack {
+  margin-left: auto;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  min-width: 112px;
+  min-height: 76px;
+  align-content: start;
+}
+
+.writing-source-stack .source-switch.slap {
+  margin-left: 0;
 }
 
 .mode-switch {
@@ -753,9 +776,13 @@ input {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .translation-word-chip {
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid #d4e9da;
   background: #f2fbf5;
   color: #2f5e43;
@@ -763,6 +790,10 @@ input {
   padding: 6px 10px;
   cursor: pointer;
   font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: left;
 }
 
 .translation-word-chip:hover,
@@ -1222,6 +1253,13 @@ input {
 
   .translation-header-controls {
     margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .writing-source-stack {
+    margin-left: 0;
+    justify-items: start;
+    width: 100%;
   }
 
   .mode-switch {

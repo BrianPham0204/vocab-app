@@ -223,7 +223,7 @@ export default function App() {
   const [dropHover, setDropHover] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [translateConfig, setTranslateConfig] = useLocalStorage('vocab_translate_config', {
-    endpoint: import.meta.env.VITE_TRANSLATE_API_URL || '',
+    endpoint: import.meta.env.VITE_TRANSLATE_API_URL || '/api/translate',
     sourceLang: 'en',
     targetLang: 'vi'
   });
@@ -1919,7 +1919,7 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              {isPracticeTab && (
+              {isPracticeTab && activeGroup !== 'writing' && (
                 <button
                   type="button"
                   className={`source-switch slap ${practiceSource === 'review' ? 'is-rev' : 'is-org'} ${sourceSlapActive ? 'is-slapping' : ''}`}
@@ -1932,31 +1932,46 @@ export default function App() {
                   <span className="source-knob" />
                 </button>
               )}
-              {activeTab === 'translation' && (
-                <div className="translation-header-controls">
-                  <label htmlFor="translation-word-count" className="info-label" style={{ margin: 0 }}>Random</label>
-                  <input
-                    id="translation-word-count"
-                    type="number"
-                    min={1}
-                    max={50}
-                    step={1}
-                    value={translationWordCount}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (raw === '') return;
-                      const parsed = Number.parseInt(raw, 10);
-                      if (Number.isNaN(parsed)) return;
-                      setTranslationWordCount(Math.max(1, Math.min(50, parsed)));
-                    }}
-                    onBlur={(e) => {
-                      const parsed = Number.parseInt(e.target.value, 10);
-                      const safe = Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(50, parsed));
-                      setTranslationWordCount(safe);
-                    }}
-                  />
-                  <button type="button" className="ghost-button" onClick={() => refreshTranslationWords(translationWordCount)}>Random</button>
+              {isPracticeTab && activeGroup === 'writing' && (
+                <div className={`writing-source-stack ${activeTab === 'translation' ? 'has-random-zone' : ''}`}>
+                  <button
+                    type="button"
+                    className={`source-switch slap ${practiceSource === 'review' ? 'is-rev' : 'is-org'} ${sourceSlapActive ? 'is-slapping' : ''}`}
+                    onClick={() => handleSwitchPracticeSource(practiceSource === 'review' ? 'all' : 'review')}
+                    title={`Switch source (Review items: ${reviewItems.length})`}
+                    aria-label="Switch source Org/Rev"
+                  >
+                    <span className="source-option org">Org</span>
+                    <span className="source-option rev">Rev</span>
+                    <span className="source-knob" />
+                  </button>
+                  {activeTab === 'translation' && (
+                    <div className="translation-header-controls">
+                      <input
+                        id="translation-word-count"
+                        type="number"
+                        min={1}
+                        max={50}
+                        step={1}
+                        value={translationWordCount}
+                        aria-label="Number of random words"
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') return;
+                          const parsed = Number.parseInt(raw, 10);
+                          if (Number.isNaN(parsed)) return;
+                          setTranslationWordCount(Math.max(1, Math.min(50, parsed)));
+                        }}
+                        onBlur={(e) => {
+                          const parsed = Number.parseInt(e.target.value, 10);
+                          const safe = Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(50, parsed));
+                          setTranslationWordCount(safe);
+                        }}
+                      />
+                      <button type="button" className="ghost-button" onClick={() => refreshTranslationWords(translationWordCount)}>Random</button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2347,12 +2362,7 @@ export default function App() {
             ) : translatePopover.error ? (
               <p className="translate-error">{translatePopover.error}</p>
             ) : (
-              <>
-                <p className="translate-result">{translatePopover.translatedText || 'Khong co ket qua.'}</p>
-                <p className="translate-muted">
-                  Nguon: {translatePopover.source || 'unknown'}
-                </p>
-              </>
+              <p className="translate-result">{translatePopover.translatedText || 'Khong co ket qua.'}</p>
             )}
           </div>
         </div>
