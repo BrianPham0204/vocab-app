@@ -1555,12 +1555,26 @@ export default function App() {
 
   const currentWordDetail = hoverDetail || currentQuestion?.detail || null;
   const canSaveCurrentWord = !!(currentWordDetail?.vocabulary || currentWordDetail?.vietnamMeaning);
+  const formatWordWithType = (word, detail) => {
+    const displayWord = String(word || detail?.vocabulary || '').trim();
+    const rawType = String(detail?.type || '').trim();
+    const displayType = rawType.replace(/^\((.*)\)$/, '$1').trim();
+    if (!displayWord || !displayType) return displayWord;
+    return `${displayWord} (${displayType})`;
+  };
+  const findDetailByVocabulary = (word) => {
+    const target = normalizeText(word);
+    if (!target) return null;
+    return (practiceDataList || []).find((item) => normalizeText(item?.vocabulary || '') === target)
+      || normalizedDataList.find((item) => normalizeText(item?.vocabulary || '') === target)
+      || null;
+  };
   const mobilePromptContent = useMemo(() => {
     if (!currentQuestion) return { primary: '', secondary: '' };
 
     if (activeTab === 'en-to-vi') {
       return {
-        primary: String(currentQuestion?.detail?.vocabulary || currentQuestion?.prompt || '').trim(),
+        primary: formatWordWithType(currentQuestion?.detail?.vocabulary || currentQuestion?.prompt || '', currentQuestion?.detail),
         secondary: String(currentQuestion?.detail?.sentences?.en || '').trim()
       };
     }
@@ -1590,7 +1604,7 @@ export default function App() {
       primary: String(currentQuestion?.prompt || '').trim(),
       secondary: ''
     };
-  }, [activeTab, currentQuestion, renderPromptText]);
+  }, [activeTab, currentQuestion, renderPromptText, practiceDataList, normalizedDataList]);
   const currentPromptWord = mobilePromptContent.primary;
   const currentPromptExample = mobilePromptContent.secondary;
   const currentPromptSynonym = String(currentQuestion?.detail?.synonym || '').trim();
@@ -2159,7 +2173,7 @@ export default function App() {
                               onTouchStart={() => setHoveredOption(word)}
                               title="Hover để xem side card"
                             >
-                              {word}
+                              {formatWordWithType(word, findDetailByVocabulary(word))}
                             </button>
                           ))}
                         </div>
