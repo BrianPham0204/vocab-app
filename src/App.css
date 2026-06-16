@@ -781,6 +781,121 @@ input {
   color: #527160;
 }
 
+.search-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.search-field {
+  display: grid;
+  gap: 8px;
+}
+
+.search-field span {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5b7c68;
+}
+
+.search-field input {
+  width: 100%;
+  border: 1px solid #d8ebdd;
+  background: #fbfefb;
+  color: #244232;
+  border-radius: 16px;
+  padding: 12px 14px;
+  outline: none;
+}
+
+.search-field input:focus {
+  border-color: #73bf8a;
+  box-shadow: 0 0 0 4px rgba(115, 191, 138, 0.15);
+}
+
+.search-field-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.search-field-chip {
+  border: 1px solid #d7eadc;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #fff;
+  color: #3f5d4c;
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.search-field-chip.active {
+  background: #e6f6ec;
+  border-color: #8cc8a1;
+  color: #1f5a39;
+}
+
+.search-results-list {
+  display: grid;
+  gap: 10px;
+}
+
+.search-result-card {
+  width: 100%;
+  border: 1px solid #dcecdf;
+  background: #f8fcf9;
+  color: #244232;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-result-card:hover,
+.search-result-card.active {
+  border-color: #98cfaa;
+  background: #eff9f2;
+}
+
+.search-result-card strong {
+  color: #173327;
+  font-size: 1rem;
+}
+
+.search-result-card span {
+  color: #527160;
+  font-size: 0.9rem;
+}
+
+.search-result-card small {
+  color: #5f7568;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.search-mobile-detail {
+  display: none;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid #e1f0e5;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.search-mobile-detail p {
+  margin: 0 0 7px;
+  color: #345742;
+  font-size: 0.9rem;
+}
+
+.search-mobile-detail p:last-child {
+  margin-bottom: 0;
+}
+
 .translation-words-box {
   padding: 14px;
 }
@@ -1286,6 +1401,10 @@ input {
   .side-card {
     display: block;
     order: 2;
+  }
+
+  .search-mobile-detail {
+    display: block;
   }
 
   .mobile-practice-top {

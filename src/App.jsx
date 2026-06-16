@@ -10,6 +10,7 @@ import { requestTranslation } from './utils/translate';
 const groupedTabs = [
   { id: 'mcq', label: 'Multiple Choice' },
   { id: 'writing', label: 'Writing' },
+  { id: 'search', label: 'Search' },
   { id: 'library', label: 'Review & Log' }
 ];
 const mcqModes = [
@@ -25,6 +26,21 @@ const writingModes = [
 const libraryModes = [
   { id: 'review', label: 'Review' },
   { id: 'writing-log', label: 'Writing Log' }
+];
+const SEARCH_FIELD_ALL = 'all';
+const searchFieldOptions = [
+  { id: SEARCH_FIELD_ALL, label: 'ALL' },
+  { id: 'vocabulary', label: 'VOCABULARY' },
+  { id: 'type', label: 'Type' },
+  { id: 'pronun', label: 'PRONUN' },
+  { id: 'wordFamily', label: 'WORD FAMILY' },
+  { id: 'synonym', label: 'SYNONYM' },
+  { id: 'vietnamMeaning', label: 'MEANING' },
+  { id: 'learn', label: 'LEARN' },
+  { id: 'collocation', label: 'COLLOCATION' },
+  { id: 'pattern', label: 'PATTERN' },
+  { id: 'example', label: 'EXAMPLE' },
+  { id: 'translate', label: 'TRANSLATE' }
 ];
 const practiceTabs = ['en-to-vi', 'vi-to-en', 'mixed', 'write-word', 'translation'];
 const SCHEMA_FIELDS = [
@@ -185,6 +201,34 @@ const attachWordOrder = (list) => (
   }))
 );
 
+const getSearchFieldValues = (item, fieldId) => {
+  const sentences = item?.sentences || {};
+  const valuesByField = {
+    vocabulary: [item?.vocabulary],
+    type: [item?.type],
+    pronun: [item?.pronun],
+    wordFamily: [item?.wordFamily],
+    synonym: [item?.synonym],
+    vietnamMeaning: [item?.vietnamMeaning],
+    learn: [item?.learn],
+    collocation: [item?.collocation],
+    pattern: [item?.pattern, item?.partern],
+    example: [sentences.en, item?.sentences_en],
+    translate: [sentences.vi, item?.sentences_vi]
+  };
+
+  if (fieldId === SEARCH_FIELD_ALL) {
+    return Object.values(valuesByField).flat();
+  }
+
+  return valuesByField[fieldId] || [];
+};
+
+const buildSearchText = (item, selectedFields) => {
+  const fields = selectedFields.includes(SEARCH_FIELD_ALL) ? [SEARCH_FIELD_ALL] : selectedFields;
+  return normalizeText(fields.flatMap((fieldId) => getSearchFieldValues(item, fieldId)).join(' '));
+};
+
 export default function App() {
   // persisted settings and data
   const [sheetUrl, setSheetUrl] = useLocalStorage('vocab_sheet_url', '');
@@ -250,6 +294,9 @@ export default function App() {
   const [translationWordCount, setTranslationWordCount] = useState(5);
   const [translationWords, setTranslationWords] = useState([]);
   const [pendingReviewRemoval, setPendingReviewRemoval] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFields, setSearchFields] = useState([SEARCH_FIELD_ALL]);
+  const [selectedSearchItem, setSelectedSearchItem] = useState(null);
   const [quizState, setQuizState] = useLocalStorage('vocab_quiz_state', createDefaultQuizState());
   const [disabledMap, setDisabledMap] = useLocalStorage('vocab_disabled_map', createDefaultDisabledMap());
   const normalizedDataList = useMemo(() => attachWordOrder(dataList), [dataList]);
@@ -267,6 +314,7 @@ export default function App() {
   const activeTab = useMemo(() => {
     if (activeGroup === 'mcq') return mcqMode;
     if (activeGroup === 'writing') return writingMode;
+    if (activeGroup === 'search') return 'search';
     return libraryMode;
   }, [activeGroup, mcqMode, writingMode, libraryMode]);
   const isPracticeTab = practiceTabs.includes(activeTab);
@@ -362,6 +410,18 @@ export default function App() {
     });
   };
 
+  const toggleSearchField = (fieldId) => {
+    setSearchFields((prev) => {
+      const current = Array.isArray(prev) && prev.length ? prev : [SEARCH_FIELD_ALL];
+      if (fieldId === SEARCH_FIELD_ALL) return [SEARCH_FIELD_ALL];
+      const withoutAll = current.filter((item) => item !== SEARCH_FIELD_ALL);
+      const next = withoutAll.includes(fieldId)
+        ? withoutAll.filter((item) => item !== fieldId)
+        : [...withoutAll, fieldId];
+      return next.length ? next : [SEARCH_FIELD_ALL];
+    });
+  };
+
   const filteredVocabularyData = useMemo(() => (
     normalizedDataList.filter((item) => {
       const rowNumber = resolveWordOrder(item, 0);
@@ -382,6 +442,41 @@ export default function App() {
   const practiceDataList = useMemo(() => (
     practiceSource === 'review' ? filteredReviewData : filteredVocabularyData
   ), [practiceSource, filteredReviewData, filteredVocabularyData]);
+
+  const normalizedSearchFields = useMemo(() => {
+    const allowed = new Set(searchFieldOptions.map((field) => field.id));
+    const next = (Array.isArray(searchFields) ? searchFields : [SEARCH_FIELD_ALL])
+      .filter((field) => allowed.has(field));
+    return next.length ? next : [SEARCH_FIELD_ALL];
+  }, [searchFields]);
+
+  const searchTerms = useMemo(() => (
+    normalizeText(searchQuery).split(' ').filter(Boolean)
+  ), [searchQuery]);
+
+  const searchResults = useMemo(() => {
+    if (!searchTerms.length) return [];
+    return normalizedDataList
+      .map((item, index) => ({
+        item,
+        index,
+        haystack: buildSearchText(item, normalizedSearchFields)
+      }))
+      .filter(({ haystack }) => searchTerms.every((term) => haystack.includes(term)))
+      .slice(0, 80);
+  }, [normalizedDataList, normalizedSearchFields, searchTerms]);
+
+  useEffect(() => {
+    if (activeTab !== 'search') return;
+    if (!searchResults.length) {
+      setSelectedSearchItem(null);
+      return;
+    }
+    const stillVisible = searchResults.some(({ item }) => item === selectedSearchItem);
+    if (!stillVisible) {
+      setSelectedSearchItem(searchResults[0].item);
+    }
+  }, [activeTab, searchResults, selectedSearchItem]);
 
   useEffect(() => {
     if (!isPracticeTab || practiceSource !== 'review' || reviewSourceData.length > 0) {
@@ -533,6 +628,9 @@ export default function App() {
   const writeWordIndex = quizState['write-word']?.index || 0;
 
   const currentQuestion = useMemo(() => {
+    if (activeTab === 'search') {
+      return null;
+    }
     if (activeTab === 'translation') {
       const words = translationWords.length ? translationWords : pickRandomVocabularyWords(translationWordCount);
       return {
@@ -564,7 +662,7 @@ export default function App() {
     return buildChoiceQuestion(practiceDataList, activeTab, dataIndex);
   }, [activeTab, practiceDataList, orders, activeIndex, writeWordIndex, translationWords, translationWordCount]);
 
-  const currentTabState = quizState[activeTab];
+  const currentTabState = quizState[activeTab] || {};
   const isMcqTab = mcqPracticeTabs.includes(activeTab);
   const activeOrderLength = (orders[activeTab] && orders[activeTab].length) || 0;
   const isMcqLibraryComplete = isMcqTab && activeOrderLength > 0 && activeIndex >= activeOrderLength;
@@ -591,6 +689,7 @@ export default function App() {
   // - for write-word tab, always show the correct answer's data (currentQuestion.detail)
   // - otherwise, prefer the chosen answer (selected) if any, then last hovered option, then first option as default
   const hoverDetail = useMemo(() => {
+    if (activeTab === 'search') return selectedSearchItem || null;
     if (!currentQuestion) return null;
 
     // write-word should always show the answer detail
@@ -614,7 +713,7 @@ export default function App() {
       return false;
     });
     return found || currentQuestion.detail || null;
-  }, [hoveredOption, currentQuestion, practiceDataList, filteredVocabularyData, activeTab, currentTabState]);
+  }, [hoveredOption, currentQuestion, practiceDataList, filteredVocabularyData, activeTab, currentTabState, selectedSearchItem]);
   // clear hover when question changes (keeps default first option)
   useEffect(() => {
     // do NOT clear hoveredOption here — keep last mouse-pointed vocab across navigation
@@ -1501,7 +1600,7 @@ export default function App() {
     }
   };
 
-  const indexKey = quizState[activeTab].index;
+  const indexKey = currentTabState?.index || 0;
   const tabDisabledEntry = (disabledMap[activeTab] || {})[indexKey] || { disabledOptions: [], lockAll: false };
   const disabledOptionsForCurrent = new Set(tabDisabledEntry.disabledOptions || []);
   const lockAllForCurrent = !!tabDisabledEntry.lockAll;
@@ -1618,6 +1717,19 @@ export default function App() {
     || currentQuestion?.answer
     || ''
   ).trim();
+  const renderSearchSummary = (item) => {
+    const word = formatWordWithType(item?.vocabulary || item?.vietnamMeaning || '', item);
+    const synonym = String(item?.synonym || '').trim();
+    const example = String(item?.sentences?.en || item?.sentences_en || item?.learn || '').trim();
+
+    return (
+      <>
+        <strong>{word || '—'}</strong>
+        {synonym ? <span>{synonym}</span> : null}
+        {example ? <small>{example}</small> : null}
+      </>
+    );
+  };
   
   useEffect(() => {
     if (!shouldAutoSpeakNextRef.current) return;
@@ -1917,11 +2029,13 @@ export default function App() {
                   {activeGroupLabel}
                 </span>
                 <h2>
-                  {activeTab === 'review' ? `Review (${reviewItems.length})`
+                  {activeTab === 'search' ? `Search (${searchResults.length})`
+                    : activeTab === 'review' ? `Review (${reviewItems.length})`
                     : activeTab === 'writing-log' ? `Writing Log (${(writingLogItems || []).length})`
                     : activeModeLabel || currentQuestion?.title}
                 </h2>
               </div>
+              {activeGroup !== 'search' && (
               <div className="mode-switch">
                 {(activeGroup === 'mcq' ? mcqModes : activeGroup === 'writing' ? writingModes : libraryModes).map((mode) => (
                   <button
@@ -1938,6 +2052,7 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              )}
               {isPracticeTab && activeGroup !== 'writing' && (
                 <button
                   type="button"
@@ -1995,7 +2110,80 @@ export default function App() {
               )}
             </div>
 
-            {activeTab === 'review' ? (
+            {activeTab === 'search' ? (
+              <div className="search-panel">
+                <label className="search-field">
+                  <span>Search</span>
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search vocabulary, synonym, meaning, example..."
+                    autoComplete="off"
+                  />
+                </label>
+
+                <div className="search-field-filter" role="group" aria-label="Search fields">
+                  {searchFieldOptions.map((field) => {
+                    const isActive = normalizedSearchFields.includes(field.id)
+                      || (field.id === SEARCH_FIELD_ALL && normalizedSearchFields.includes(SEARCH_FIELD_ALL));
+                    return (
+                      <button
+                        key={field.id}
+                        type="button"
+                        className={`search-field-chip ${isActive ? 'active' : ''}`}
+                        onClick={() => toggleSearchField(field.id)}
+                        aria-pressed={isActive}
+                      >
+                        {field.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {searchTerms.length ? (
+                  searchResults.length ? (
+                    <div className="search-results-list">
+                      {searchResults.map(({ item, index }) => {
+                        const isSelected = selectedSearchItem === item;
+                        return (
+                          <div key={`${item?._rowNumber || index}-${item?.vocabulary || item?.vietnamMeaning || index}`}>
+                            <button
+                              type="button"
+                              className={`search-result-card ${isSelected ? 'active' : ''}`}
+                              onClick={() => {
+                                setSelectedSearchItem(item);
+                                setHoveredOption(item?.vocabulary || item?.vietnamMeaning || '');
+                              }}
+                            >
+                              {renderSearchSummary(item)}
+                            </button>
+                            {isSelected ? (
+                              <div className="search-mobile-detail">
+                                <p><strong>Meaning:</strong> {item?.vietnamMeaning || '—'}</p>
+                                <p><strong>Pronunciation:</strong> {item?.pronun || '—'}</p>
+                                <p><strong>Word family:</strong> {item?.wordFamily || '—'}</p>
+                                <p><strong>Collocation:</strong> {item?.collocation || '—'}</p>
+                                <p><strong>Pattern:</strong> {item?.pattern || item?.partern || '—'}</p>
+                                <p><strong>Translate:</strong> {item?.sentences?.vi || item?.sentences_vi || '—'}</p>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="data-structure">
+                      <p style={{ margin: 0 }}>No matching rows.</p>
+                    </div>
+                  )
+                ) : (
+                  <div className="data-structure">
+                    <p style={{ margin: 0 }}>Type to search across your vocabulary data.</p>
+                  </div>
+                )}
+              </div>
+            ) : activeTab === 'review' ? (
               <div className="review-panel">
                 <div className="actions" style={{ marginBottom: 12 }}>
                   <button className="ghost-button" onClick={handleClearReview} disabled={!reviewItems.length}>Clear</button>
