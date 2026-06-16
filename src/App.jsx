@@ -28,6 +28,8 @@ const libraryModes = [
   { id: 'writing-log', label: 'Writing Log' }
 ];
 const SEARCH_FIELD_ALL = 'all';
+const SEARCH_MATCH_CONTAINS = 'contains';
+const SEARCH_MATCH_EXACT = 'exact';
 const searchFieldOptions = [
   { id: SEARCH_FIELD_ALL, label: 'ALL' },
   { id: 'vocabulary', label: 'VOCABULARY' },
@@ -296,6 +298,8 @@ export default function App() {
   const [pendingReviewRemoval, setPendingReviewRemoval] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFields, setSearchFields] = useState([SEARCH_FIELD_ALL]);
+  const [searchMatchMode, setSearchMatchMode] = useState(SEARCH_MATCH_CONTAINS);
+  const [searchFieldsOpen, setSearchFieldsOpen] = useState(false);
   const [selectedSearchItem, setSelectedSearchItem] = useState(null);
   const [quizState, setQuizState] = useLocalStorage('vocab_quiz_state', createDefaultQuizState());
   const [disabledMap, setDisabledMap] = useLocalStorage('vocab_disabled_map', createDefaultDisabledMap());
@@ -450,21 +454,37 @@ export default function App() {
     return next.length ? next : [SEARCH_FIELD_ALL];
   }, [searchFields]);
 
+  const normalizedSearchQuery = useMemo(() => normalizeText(searchQuery), [searchQuery]);
+
   const searchTerms = useMemo(() => (
-    normalizeText(searchQuery).split(' ').filter(Boolean)
-  ), [searchQuery]);
+    normalizedSearchQuery.split(' ').filter(Boolean)
+  ), [normalizedSearchQuery]);
+
+  const searchFieldSummary = useMemo(() => {
+    if (normalizedSearchFields.includes(SEARCH_FIELD_ALL)) return 'All fields';
+    if (normalizedSearchFields.length === 1) {
+      return searchFieldOptions.find((field) => field.id === normalizedSearchFields[0])?.label || '1 field';
+    }
+    return `${normalizedSearchFields.length} fields`;
+  }, [normalizedSearchFields]);
 
   const searchResults = useMemo(() => {
     if (!searchTerms.length) return [];
+    const exactNeedle = ` ${normalizedSearchQuery} `;
     return normalizedDataList
       .map((item, index) => ({
         item,
         index,
         haystack: buildSearchText(item, normalizedSearchFields)
       }))
-      .filter(({ haystack }) => searchTerms.every((term) => haystack.includes(term)))
+      .filter(({ haystack }) => {
+        if (searchMatchMode === SEARCH_MATCH_EXACT) {
+          return ` ${haystack} `.includes(exactNeedle);
+        }
+        return searchTerms.every((term) => haystack.includes(term));
+      })
       .slice(0, 80);
-  }, [normalizedDataList, normalizedSearchFields, searchTerms]);
+  }, [normalizedDataList, normalizedSearchFields, normalizedSearchQuery, searchTerms, searchMatchMode]);
 
   useEffect(() => {
     if (activeTab !== 'search') return;
@@ -2112,76 +2132,115 @@ export default function App() {
 
             {activeTab === 'search' ? (
               <div className="search-panel">
-                <label className="search-field">
-                  <span>Search</span>
-                  <input
-                    type="search"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search vocabulary, synonym, meaning, example..."
-                    autoComplete="off"
-                  />
-                </label>
+                <div className="search-controls">
+                  <label className="search-field">
+                    <span>Search</span>
+                    <input
+                      type="search"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search vocabulary, synonym, meaning, example..."
+                      autoComplete="off"
+                    />
+                  </label>
 
-                <div className="search-field-filter" role="group" aria-label="Search fields">
-                  {searchFieldOptions.map((field) => {
-                    const isActive = normalizedSearchFields.includes(field.id)
-                      || (field.id === SEARCH_FIELD_ALL && normalizedSearchFields.includes(SEARCH_FIELD_ALL));
-                    return (
+                  <div className="search-control-row">
+                    <div className="search-mode-switch" role="group" aria-label="Search match mode">
                       <button
-                        key={field.id}
                         type="button"
-                        className={`search-field-chip ${isActive ? 'active' : ''}`}
-                        onClick={() => toggleSearchField(field.id)}
-                        aria-pressed={isActive}
+                        className={`search-mode-button ${searchMatchMode === SEARCH_MATCH_CONTAINS ? 'active' : ''}`}
+                        onClick={() => setSearchMatchMode(SEARCH_MATCH_CONTAINS)}
                       >
-                        {field.label}
+                        Contains
                       </button>
-                    );
-                  })}
+                      <button
+                        type="button"
+                        className={`search-mode-button ${searchMatchMode === SEARCH_MATCH_EXACT ? 'active' : ''}`}
+                        onClick={() => setSearchMatchMode(SEARCH_MATCH_EXACT)}
+                      >
+                        Exact
+                      </button>
+                    </div>
+
+                    <div className="search-field-picker">
+                      <button
+                        type="button"
+                        className={`search-field-toggle ${searchFieldsOpen ? 'active' : ''}`}
+                        onClick={() => setSearchFieldsOpen((open) => !open)}
+                        aria-expanded={searchFieldsOpen}
+                      >
+                        <span>Fields</span>
+                        <strong>{searchFieldSummary}</strong>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="search-field-picker">
+                    {searchFieldsOpen ? (
+                      <div className="search-field-filter" role="group" aria-label="Search fields">
+                        {searchFieldOptions.map((field) => {
+                          const isActive = normalizedSearchFields.includes(field.id)
+                            || (field.id === SEARCH_FIELD_ALL && normalizedSearchFields.includes(SEARCH_FIELD_ALL));
+                          return (
+                            <button
+                              key={field.id}
+                              type="button"
+                              className={`search-field-chip ${isActive ? 'active' : ''}`}
+                              onClick={() => toggleSearchField(field.id)}
+                              aria-pressed={isActive}
+                            >
+                              {field.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
-                {searchTerms.length ? (
-                  searchResults.length ? (
-                    <div className="search-results-list">
-                      {searchResults.map(({ item, index }) => {
-                        const isSelected = selectedSearchItem === item;
-                        return (
-                          <div key={`${item?._rowNumber || index}-${item?.vocabulary || item?.vietnamMeaning || index}`}>
-                            <button
-                              type="button"
-                              className={`search-result-card ${isSelected ? 'active' : ''}`}
-                              onClick={() => {
-                                setSelectedSearchItem(item);
-                                setHoveredOption(item?.vocabulary || item?.vietnamMeaning || '');
-                              }}
-                            >
-                              {renderSearchSummary(item)}
-                            </button>
-                            {isSelected ? (
-                              <div className="search-mobile-detail">
-                                <p><strong>Meaning:</strong> {item?.vietnamMeaning || '—'}</p>
-                                <p><strong>Pronunciation:</strong> {item?.pronun || '—'}</p>
-                                <p><strong>Word family:</strong> {item?.wordFamily || '—'}</p>
-                                <p><strong>Collocation:</strong> {item?.collocation || '—'}</p>
-                                <p><strong>Pattern:</strong> {item?.pattern || item?.partern || '—'}</p>
-                                <p><strong>Translate:</strong> {item?.sentences?.vi || item?.sentences_vi || '—'}</p>
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
+                <div className="search-results-pane">
+                  {searchTerms.length ? (
+                    searchResults.length ? (
+                      <div className="search-results-list">
+                        {searchResults.map(({ item, index }) => {
+                          const isSelected = selectedSearchItem === item;
+                          return (
+                            <div key={`${item?._rowNumber || index}-${item?.vocabulary || item?.vietnamMeaning || index}`}>
+                              <button
+                                type="button"
+                                className={`search-result-card ${isSelected ? 'active' : ''}`}
+                                onClick={() => {
+                                  setSelectedSearchItem(item);
+                                  setHoveredOption(item?.vocabulary || item?.vietnamMeaning || '');
+                                }}
+                              >
+                                {renderSearchSummary(item)}
+                              </button>
+                              {isSelected ? (
+                                <div className="search-mobile-detail">
+                                  <p><strong>Meaning:</strong> {item?.vietnamMeaning || '—'}</p>
+                                  <p><strong>Pronunciation:</strong> {item?.pronun || '—'}</p>
+                                  <p><strong>Word family:</strong> {item?.wordFamily || '—'}</p>
+                                  <p><strong>Collocation:</strong> {item?.collocation || '—'}</p>
+                                  <p><strong>Pattern:</strong> {item?.pattern || item?.partern || '—'}</p>
+                                  <p><strong>Translate:</strong> {item?.sentences?.vi || item?.sentences_vi || '—'}</p>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="data-structure">
+                        <p style={{ margin: 0 }}>No matching rows.</p>
+                      </div>
+                    )
                   ) : (
                     <div className="data-structure">
-                      <p style={{ margin: 0 }}>No matching rows.</p>
+                      <p style={{ margin: 0 }}>Type to search across your vocabulary data.</p>
                     </div>
-                  )
-                ) : (
-                  <div className="data-structure">
-                    <p style={{ margin: 0 }}>Type to search across your vocabulary data.</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ) : activeTab === 'review' ? (
               <div className="review-panel">
