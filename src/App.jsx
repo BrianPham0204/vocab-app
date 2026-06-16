@@ -1560,7 +1560,12 @@ export default function App() {
     const rawType = String(detail?.type || '').trim();
     const displayType = rawType.replace(/^\((.*)\)$/, '$1').trim();
     if (!displayWord || !displayType) return displayWord;
-    return `${displayWord} (${displayType})`;
+    return (
+      <span className="word-with-type">
+        <span>{displayWord}</span>
+        <span className="word-type">({displayType})</span>
+      </span>
+    );
   };
   const findDetailByVocabulary = (word) => {
     const target = normalizeText(word);

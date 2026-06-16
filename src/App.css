@@ -675,6 +675,19 @@ input {
   color: #244232;
 }
 
+.word-with-type {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.34em;
+  min-width: 0;
+}
+
+.word-type {
+  color: #7a8b82;
+  font-size: 0.68em;
+  font-weight: 700;
+}
+
 .mapping-value {
   min-height: 48px;
   display: flex;
