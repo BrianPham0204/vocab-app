@@ -300,6 +300,13 @@ export default function App() {
   const [searchFields, setSearchFields] = useState([SEARCH_FIELD_ALL]);
   const [searchMatchMode, setSearchMatchMode] = useState(SEARCH_MATCH_CONTAINS);
   const [searchFieldsOpen, setSearchFieldsOpen] = useState(false);
+  const [searchFallback, setSearchFallback] = useState({
+    query: '',
+    translatedText: '',
+    provider: '',
+    loading: false,
+    error: ''
+  });
   const [selectedSearchItem, setSelectedSearchItem] = useState(null);
   const [quizState, setQuizState] = useLocalStorage('vocab_quiz_state', createDefaultQuizState());
   const [disabledMap, setDisabledMap] = useLocalStorage('vocab_disabled_map', createDefaultDisabledMap());
@@ -327,6 +334,7 @@ export default function App() {
   const mappingRef = useRef(mapping);
   const translateAbortRef = useRef(null);
   const translateCacheRef = useRef(new Map());
+  const searchTranslateAbortRef = useRef(null);
   const translatePopupRef = useRef(null);
   const savedToastTimerRef = useRef(null);
   const sourceSlapTimerRef = useRef(null);
@@ -497,6 +505,98 @@ export default function App() {
       setSelectedSearchItem(searchResults[0].item);
     }
   }, [activeTab, searchResults, selectedSearchItem]);
+
+  useEffect(() => {
+    if (activeTab !== 'search' || !normalizedSearchQuery || searchResults.length > 0) {
+      if (searchTranslateAbortRef.current) {
+        searchTranslateAbortRef.current.abort();
+        searchTranslateAbortRef.current = null;
+      }
+      setSearchFallback({
+        query: '',
+        translatedText: '',
+        provider: '',
+        loading: false,
+        error: ''
+      });
+      return undefined;
+    }
+
+    const sourceLang = translateConfig?.sourceLang || 'en';
+    const targetLang = translateConfig?.targetLang || 'vi';
+    const cacheKey = `search:${sourceLang}:${targetLang}:${normalizedSearchQuery}`;
+    const cached = translateCacheRef.current.get(cacheKey);
+
+    if (cached) {
+      setSearchFallback({
+        query: searchQuery.trim(),
+        translatedText: cached.translatedText || '',
+        provider: cached.provider || '',
+        loading: false,
+        error: ''
+      });
+      return undefined;
+    }
+
+    setSearchFallback({
+      query: searchQuery.trim(),
+      translatedText: '',
+      provider: '',
+      loading: true,
+      error: ''
+    });
+
+    const timer = window.setTimeout(async () => {
+      if (searchTranslateAbortRef.current) {
+        searchTranslateAbortRef.current.abort();
+      }
+
+      const controller = new AbortController();
+      searchTranslateAbortRef.current = controller;
+
+      try {
+        const apiResult = await requestTranslation({
+          endpoint: translateConfig?.endpoint || '',
+          text: searchQuery.trim(),
+          sourceLang,
+          targetLang,
+          signal: controller.signal
+        });
+
+        translateCacheRef.current.set(cacheKey, apiResult);
+        setSearchFallback({
+          query: searchQuery.trim(),
+          translatedText: apiResult.translatedText,
+          provider: apiResult.provider || '',
+          loading: false,
+          error: ''
+        });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setSearchFallback({
+          query: searchQuery.trim(),
+          translatedText: '',
+          provider: '',
+          loading: false,
+          error: translateConfig?.endpoint
+            ? 'Khong the lay ban dich tu endpoint hien tai.'
+            : 'Chua cau hinh endpoint dich. Hay them Translation API URL trong Settings.'
+        });
+      } finally {
+        if (searchTranslateAbortRef.current === controller) {
+          searchTranslateAbortRef.current = null;
+        }
+      }
+    }, 600);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (searchTranslateAbortRef.current) {
+        searchTranslateAbortRef.current.abort();
+        searchTranslateAbortRef.current = null;
+      }
+    };
+  }, [activeTab, normalizedSearchQuery, searchQuery, searchResults.length, translateConfig]);
 
   useEffect(() => {
     if (!isPracticeTab || practiceSource !== 'review' || reviewSourceData.length > 0) {
@@ -1428,6 +1528,9 @@ export default function App() {
     if (translateAbortRef.current) {
       translateAbortRef.current.abort();
     }
+    if (searchTranslateAbortRef.current) {
+      searchTranslateAbortRef.current.abort();
+    }
     if (savedToastTimerRef.current) {
       clearTimeout(savedToastTimerRef.current);
     }
@@ -2231,8 +2334,21 @@ export default function App() {
                         })}
                       </div>
                     ) : (
-                      <div className="data-structure">
-                        <p style={{ margin: 0 }}>No matching rows.</p>
+                      <div className="search-fallback-card">
+                        <span className="info-label">No local match</span>
+                        <strong>{searchFallback.query || searchQuery.trim()}</strong>
+                        {searchFallback.loading ? (
+                          <p>Dang goi Google Translate...</p>
+                        ) : searchFallback.error ? (
+                          <p className="search-fallback-error">{searchFallback.error}</p>
+                        ) : searchFallback.translatedText ? (
+                          <>
+                            <p>{searchFallback.translatedText}</p>
+                            <small>Fallback translation</small>
+                          </>
+                        ) : (
+                          <p>No matching rows.</p>
+                        )}
                       </div>
                     )
                   ) : (

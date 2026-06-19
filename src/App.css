@@ -977,6 +977,38 @@ input {
   line-height: 1.45;
 }
 
+.search-fallback-card {
+  border: 1px dashed #cddfd3;
+  background: #fbfefb;
+  color: #244232;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.search-fallback-card strong {
+  color: #173327;
+  font-size: 1rem;
+  word-break: break-word;
+}
+
+.search-fallback-card p {
+  margin: 0;
+  color: #3f5d4c;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.search-fallback-card small {
+  color: #6c8174;
+  font-size: 0.8rem;
+}
+
+.search-fallback-error {
+  color: #a44545 !important;
+}
+
 .search-mobile-detail {
   display: none;
   margin-top: 8px;
