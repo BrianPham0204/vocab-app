@@ -10,6 +10,7 @@ import { requestTranslation } from './utils/translate';
 const groupedTabs = [
   { id: 'mcq', label: 'Multiple Choice' },
   { id: 'writing', label: 'Writing' },
+  { id: 'story', label: 'Story' },
   { id: 'search', label: 'Search' },
   { id: 'library', label: 'Review & Log' }
 ];
@@ -26,6 +27,17 @@ const writingModes = [
 const libraryModes = [
   { id: 'review', label: 'Review' },
   { id: 'writing-log', label: 'Writing Log' }
+];
+const storyFormats = [
+  { id: 'narrative', label: 'Story' },
+  { id: 'dialogue', label: '2 People' },
+  { id: 'interview', label: 'Interview' },
+  { id: 'podcast', label: 'Podcast' }
+];
+const OR_MODELS = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'google/gemma-4-31b-it:free',
+  'openai/gpt-oss-120b:free'
 ];
 const SEARCH_FIELD_ALL = 'all';
 const SEARCH_MATCH_CONTAINS = 'contains';
@@ -231,6 +243,52 @@ const buildSearchText = (item, selectedFields) => {
   return normalizeText(fields.flatMap((fieldId) => getSearchFieldValues(item, fieldId)).join(' '));
 };
 
+const buildLocalStoryDraft = ({ items, format, context }) => {
+  const words = (items || [])
+    .map((item) => String(item?.vocabulary || item?.vietnamMeaning || '').trim())
+    .filter(Boolean);
+  const cleanContext = String(context || '').trim();
+  const topic = cleanContext || 'a late afternoon ride across the city';
+  const wordList = words.length ? words : ['focus', 'practice', 'memory'];
+  const sentenceFor = (word, index) => {
+    const meaning = String(items?.[index]?.vietnamMeaning || '').trim();
+    const note = meaning ? `, a word I connect with "${meaning},"` : '';
+    return `I tried to use "${word}"${note} while the scene kept moving around me.`;
+  };
+
+  if (format === 'dialogue') {
+    return [
+      `A: On the way today, I kept thinking about ${topic}.`,
+      `B: Give me the vocabulary version.`,
+      ...wordList.map((word, index) => `A: ${sentenceFor(word, index)}`),
+      'B: That sounds like a small conversation, but it sticks because every word has a place.'
+    ].join('\n');
+  }
+
+  if (format === 'interview') {
+    return [
+      `Host: What was the scene?`,
+      `Guest: It was ${topic}, and I wanted each word to feel useful.`,
+      ...wordList.map((word, index) => `Host: How did "${word}" appear?\nGuest: ${sentenceFor(word, index)}`),
+      'Host: Final thought?\nGuest: A word becomes easier to remember when it belongs to a moment.'
+    ].join('\n');
+  }
+
+  if (format === 'podcast') {
+    return [
+      `Today, let me take you into ${topic}.`,
+      ...wordList.map((word, index) => sentenceFor(word, index)),
+      'By the end of the ride, the words did not feel like a list anymore. They felt like small handles for memory.'
+    ].join(' ');
+  }
+
+  return [
+    `Today, I was thinking about ${topic}.`,
+    ...wordList.map((word, index) => sentenceFor(word, index)),
+    'When I reviewed the story later, each word felt easier to recognize because it had already lived inside a simple scene.'
+  ].join(' ');
+};
+
 export default function App() {
   // persisted settings and data
   const [sheetUrl, setSheetUrl] = useLocalStorage('vocab_sheet_url', '');
@@ -295,6 +353,12 @@ export default function App() {
   const [sourceSlapActive, setSourceSlapActive] = useState(false);
   const [translationWordCount, setTranslationWordCount] = useState(5);
   const [translationWords, setTranslationWords] = useState([]);
+  const [storySource, setStorySource] = useState('all');
+  const [storyWordCount, setStoryWordCount] = useState(8);
+  const [storyFormat, setStoryFormat] = useState('narrative');
+  const [storyContext, setStoryContext] = useState('');
+  const [storyItems, setStoryItems] = useState([]);
+  const [storyText, setStoryText] = useState('');
   const [pendingReviewRemoval, setPendingReviewRemoval] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFields, setSearchFields] = useState([SEARCH_FIELD_ALL]);
@@ -325,6 +389,7 @@ export default function App() {
   const activeTab = useMemo(() => {
     if (activeGroup === 'mcq') return mcqMode;
     if (activeGroup === 'writing') return writingMode;
+    if (activeGroup === 'story') return 'story';
     if (activeGroup === 'search') return 'search';
     return libraryMode;
   }, [activeGroup, mcqMode, writingMode, libraryMode]);
@@ -454,6 +519,10 @@ export default function App() {
   const practiceDataList = useMemo(() => (
     practiceSource === 'review' ? filteredReviewData : filteredVocabularyData
   ), [practiceSource, filteredReviewData, filteredVocabularyData]);
+
+  const storyDataList = useMemo(() => (
+    storySource === 'review' ? filteredReviewData : filteredVocabularyData
+  ), [storySource, filteredReviewData, filteredVocabularyData]);
 
   const normalizedSearchFields = useMemo(() => {
     const allowed = new Set(searchFieldOptions.map((field) => field.id));
@@ -636,12 +705,66 @@ export default function App() {
     updateTabState('translation', { input: '', checked: false, feedback: '' });
   };
 
+  const pickRandomStoryItems = (requestedCount = storyWordCount) => {
+    const pool = storyDataList.filter((item) => String(item?.vocabulary || '').trim());
+    const unique = [];
+    const seen = new Set();
+    pool.forEach((item) => {
+      const key = normalizeText(item?.vocabulary || item?.vietnamMeaning || '');
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      unique.push(item);
+    });
+    if (!unique.length) return [];
+    const safeCount = Math.max(1, Math.min(Number(requestedCount) || 1, unique.length));
+    const shuffled = [...unique];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, safeCount);
+  };
+
+  const refreshStoryWords = (requestedCount = storyWordCount) => {
+    const nextItems = pickRandomStoryItems(requestedCount);
+    setStoryItems(nextItems);
+    setStoryText(buildLocalStoryDraft({ items: nextItems, format: storyFormat, context: storyContext }));
+  };
+
+  const handleGenerateStoryDraft = () => {
+    const items = storyItems.length ? storyItems : pickRandomStoryItems(storyWordCount);
+    setStoryItems(items);
+    setStoryText(buildLocalStoryDraft({ items, format: storyFormat, context: storyContext }));
+  };
+
+  const handleReadStory = () => {
+    if (!storyText.trim()) return;
+    speak(storyText, 'en-US');
+  };
+
+  const handleStopStory = () => {
+    try {
+      window.speechSynthesis?.cancel();
+    } catch (error) {
+      // ignore if not supported
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'translation' && !translationWords.length && practiceDataList.length) {
       setTranslationWords(pickRandomVocabularyWords(translationWordCount));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, practiceDataList, practiceSource]);
+
+  useEffect(() => {
+    if (activeTab === 'story' && !storyItems.length && storyDataList.length) {
+      const nextItems = pickRandomStoryItems(storyWordCount);
+      setStoryItems(nextItems);
+      setStoryText(buildLocalStoryDraft({ items: nextItems, format: storyFormat, context: storyContext }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, storyDataList, storySource]);
 
   // keep persisted quiz progress compatible with the current dataset/filter
   useEffect(() => {
@@ -748,7 +871,7 @@ export default function App() {
   const writeWordIndex = quizState['write-word']?.index || 0;
 
   const currentQuestion = useMemo(() => {
-    if (activeTab === 'search') {
+    if (activeTab === 'search' || activeTab === 'story') {
       return null;
     }
     if (activeTab === 'translation') {
@@ -810,6 +933,13 @@ export default function App() {
   // - otherwise, prefer the chosen answer (selected) if any, then last hovered option, then first option as default
   const hoverDetail = useMemo(() => {
     if (activeTab === 'search') return selectedSearchItem || null;
+    if (activeTab === 'story') {
+      const targetNorm = normalizeText(hoveredOption || '');
+      return storyItems.find((item) => {
+        if (!item) return false;
+        return normalizeText(item.vocabulary) === targetNorm || normalizeText(item.vietnamMeaning) === targetNorm;
+      }) || storyItems[0] || null;
+    }
     if (!currentQuestion) return null;
 
     // write-word should always show the answer detail
@@ -833,7 +963,7 @@ export default function App() {
       return false;
     });
     return found || currentQuestion.detail || null;
-  }, [hoveredOption, currentQuestion, practiceDataList, filteredVocabularyData, activeTab, currentTabState, selectedSearchItem]);
+  }, [hoveredOption, currentQuestion, practiceDataList, filteredVocabularyData, activeTab, currentTabState, selectedSearchItem, storyItems]);
   // clear hover when question changes (keeps default first option)
   useEffect(() => {
     // do NOT clear hoveredOption here — keep last mouse-pointed vocab across navigation
@@ -1633,6 +1763,16 @@ export default function App() {
     setWritingLogList([]);
   };
 
+  const triggerSourceSlap = () => {
+    setSourceSlapActive(true);
+    if (sourceSlapTimerRef.current) {
+      clearTimeout(sourceSlapTimerRef.current);
+    }
+    sourceSlapTimerRef.current = window.setTimeout(() => {
+      setSourceSlapActive(false);
+    }, 260);
+  };
+
   const handleSwitchPracticeSource = (nextSource) => {
     if (nextSource === practiceSource) return;
     setPendingReviewRemoval(null);
@@ -1873,7 +2013,9 @@ export default function App() {
     ? (mcqModes.find((m) => m.id === mcqMode)?.label || '')
     : activeGroup === 'writing'
       ? (writingModes.find((m) => m.id === writingMode)?.label || '')
-      : (libraryModes.find((m) => m.id === libraryMode)?.label || '');
+      : activeGroup === 'story'
+        ? 'Listening Story'
+        : (libraryModes.find((m) => m.id === libraryMode)?.label || '');
   const sampleRow = sheetPreviewRows && sheetPreviewRows.length ? sheetPreviewRows[0] : null;
   const totalWordCount = normalizedDataList.length;
   const visibleWordCount = filteredVocabularyData.length;
@@ -2158,7 +2300,7 @@ export default function App() {
                     : activeModeLabel || currentQuestion?.title}
                 </h2>
               </div>
-              {activeGroup !== 'search' && (
+              {activeGroup !== 'search' && activeGroup !== 'story' && (
               <div className="mode-switch">
                 {(activeGroup === 'mcq' ? mcqModes : activeGroup === 'writing' ? writingModes : libraryModes).map((mode) => (
                   <button
@@ -2175,6 +2317,48 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              )}
+              {activeGroup === 'story' && (
+                <div className="story-header-controls">
+                  <button
+                    type="button"
+                    className={`source-switch slap ${storySource === 'review' ? 'is-rev' : 'is-org'} ${sourceSlapActive ? 'is-slapping' : ''}`}
+                    onClick={() => {
+                      setStorySource(storySource === 'review' ? 'all' : 'review');
+                      triggerSourceSlap();
+                    }}
+                    title={`Switch source (Review items: ${reviewItems.length})`}
+                    aria-label="Switch story source Org/Rev"
+                  >
+                    <span className="source-option org">Org</span>
+                    <span className="source-option rev">Rev</span>
+                    <span className="source-knob" />
+                  </button>
+                  <div className="translation-header-controls story-count-control">
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      step={1}
+                      value={storyWordCount}
+                      aria-label="Number of story words"
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '') return;
+                        const parsed = Number.parseInt(raw, 10);
+                        if (Number.isNaN(parsed)) return;
+                        setStoryWordCount(Math.max(1, Math.min(30, parsed)));
+                      }}
+                      onBlur={(e) => {
+                        const parsed = Number.parseInt(e.target.value, 10);
+                        const safe = Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(30, parsed));
+                        setStoryWordCount(safe);
+                      }}
+                    />
+                    <button type="button" className="ghost-button" onClick={() => refreshStoryWords(storyWordCount)}>Random</button>
+                  </div>
+                </div>
               )}
               {isPracticeTab && activeGroup !== 'writing' && (
                 <button
@@ -2354,6 +2538,90 @@ export default function App() {
                   ) : (
                     <div className="data-structure">
                       <p style={{ margin: 0 }}>Type to search across your vocabulary data.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : activeTab === 'story' ? (
+              <div className="story-panel">
+                <div className="story-toolbar">
+                  <div className="story-format-switch" role="group" aria-label="Story format">
+                    {storyFormats.map((format) => (
+                      <button
+                        key={format.id}
+                        type="button"
+                        className={`story-format-button ${storyFormat === format.id ? 'active' : ''}`}
+                        onClick={() => setStoryFormat(format.id)}
+                      >
+                        {format.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className="primary-button" onClick={handleGenerateStoryDraft}>
+                    Generate
+                  </button>
+                </div>
+
+                <label className="story-context-field">
+                  <span>Context</span>
+                  <input
+                    type="text"
+                    value={storyContext}
+                    onChange={(e) => setStoryContext(e.target.value)}
+                    placeholder="a commute, a meeting, a short interview..."
+                  />
+                </label>
+
+                <div className="story-layout">
+                  <section className="story-player">
+                    <div className="story-player-header">
+                      <span className="info-label">Draft story</span>
+                      <div className="story-player-actions">
+                        <button type="button" className="ghost-button" onClick={handleReadStory} disabled={!storyText.trim()}>Play</button>
+                        <button type="button" className="secondary-button" onClick={handleStopStory}>Stop</button>
+                      </div>
+                    </div>
+                    <div className="story-text">
+                      {storyText ? storyText : 'Generate a story from your vocabulary list.'}
+                    </div>
+                  </section>
+
+                  <aside className="story-api-card">
+                    <span className="info-label">API pipeline</span>
+                    <div className="story-model-list">
+                      {OR_MODELS.map((model, index) => (
+                        <div key={model} className="story-model-row">
+                          <span>{index + 1}</span>
+                          <strong>{model}</strong>
+                        </div>
+                      ))}
+                    </div>
+                    <small>Fallback order ready. Google Sheet save is next.</small>
+                  </aside>
+                </div>
+
+                <div className="story-recap">
+                  <div className="story-recap-header">
+                    <span className="info-label">Vocabulary recap</span>
+                    <strong>{storyItems.length} words</strong>
+                  </div>
+                  {storyItems.length ? (
+                    <div className="story-word-grid">
+                      {storyItems.map((item, index) => (
+                        <button
+                          key={`${item?._rowNumber || index}-${item?.vocabulary || index}`}
+                          type="button"
+                          className="story-word-card"
+                          onClick={() => setHoveredOption(item?.vocabulary || item?.vietnamMeaning || '')}
+                        >
+                          <strong>{formatWordWithType(item?.vocabulary || item?.vietnamMeaning || '', item)}</strong>
+                          <span>{item?.vietnamMeaning || item?.synonym || 'No meaning'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="data-structure">
+                      <p style={{ margin: 0 }}>No vocabulary available for this source.</p>
                     </div>
                   )}
                 </div>
