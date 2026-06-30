@@ -64,6 +64,9 @@ async function genStory({ words, format, context }) {
 
   const prompt = `Write ${desc} that uses ALL of these vocabulary words naturally: ${wordList}. ${ctxNote}
 
+The story should flow as a real story — do NOT define, explain, or annotate any word inside the story itself.
+Just use each word in context so a reader can infer its meaning from the scene.
+
 Output ONLY a raw JSON object — no markdown fences, no explanation:
 {
   "sentences": [
@@ -76,7 +79,8 @@ Rules:
 - 8 to 14 sentences total
 - Each entry is ONE complete sentence ending with . ! or ?
 - "words" lists which target vocab words appear in that sentence (empty array [] if none)
-- Tone: natural and engaging`;
+- Do NOT write meta-commentary like "a word meaning X" or "which means Y" — treat them as normal words
+- Tone: natural and engaging, like a short story someone would actually read`;
 
   let lastError;
   for (const model of OR_MODELS) {

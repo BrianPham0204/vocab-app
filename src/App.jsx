@@ -244,6 +244,19 @@ const buildSearchText = (item, selectedFields) => {
   return normalizeText(fields.flatMap((fieldId) => getSearchFieldValues(item, fieldId)).join(' '));
 };
 
+const STORY_SENTENCE_TEMPLATES = [
+  (w) => `There was something about ${w} that kept coming back to me.`,
+  (w) => `I had to ${w} — or at least try to.`,
+  (w) => `Everything that day seemed to call for ${w}.`,
+  (w) => `It was the kind of moment where ${w} actually made sense.`,
+  (w) => `I didn't expect ${w} to matter, but it did.`,
+  (w) => `That feeling — I can only describe it as ${w}.`,
+  (w) => `Without ${w}, the whole thing would have fallen apart.`,
+  (w) => `${w} was the one thing I kept returning to.`,
+  (w) => `By the end, ${w} was the only word that fit.`,
+  (w) => `I found ${w} where I least expected it.`,
+];
+
 const buildLocalStoryDraft = ({ items, format, context }) => {
   const words = (items || [])
     .map((item) => String(item?.vocabulary || item?.vietnamMeaning || '').trim())
@@ -251,42 +264,39 @@ const buildLocalStoryDraft = ({ items, format, context }) => {
   const cleanContext = String(context || '').trim();
   const topic = cleanContext || 'a late afternoon ride across the city';
   const wordList = words.length ? words : ['focus', 'practice', 'memory'];
-  const sentenceFor = (word, index) => {
-    const meaning = String(items?.[index]?.vietnamMeaning || '').trim();
-    const note = meaning ? `, a word I connect with "${meaning},"` : '';
-    return `I tried to use "${word}"${note} while the scene kept moving around me.`;
-  };
+  const sentenceFor = (word, index) =>
+    STORY_SENTENCE_TEMPLATES[index % STORY_SENTENCE_TEMPLATES.length](word);
 
   if (format === 'dialogue') {
     return [
-      `A: On the way today, I kept thinking about ${topic}.`,
-      `B: Give me the vocabulary version.`,
-      ...wordList.map((word, index) => `A: ${sentenceFor(word, index)}`),
-      'B: That sounds like a small conversation, but it sticks because every word has a place.'
+      `A: So I was in the middle of ${topic}, and things started clicking.`,
+      `B: Like what?`,
+      ...wordList.map((word, index) => `A: ${sentenceFor(word, index)}\nB: Go on.`),
+      `A: That's the whole story.\nB: It's enough.`,
     ].join('\n');
   }
 
   if (format === 'interview') {
     return [
-      `Host: What was the scene?`,
-      `Guest: It was ${topic}, and I wanted each word to feel useful.`,
-      ...wordList.map((word, index) => `Host: How did "${word}" appear?\nGuest: ${sentenceFor(word, index)}`),
-      'Host: Final thought?\nGuest: A word becomes easier to remember when it belongs to a moment.'
+      `Host: Take me back to ${topic}.`,
+      `Guest: It started simply enough.`,
+      ...wordList.map((word, index) => `Guest: ${sentenceFor(word, index)}`),
+      `Host: And that's what stayed with you?\nGuest: Every single time.`,
     ].join('\n');
   }
 
   if (format === 'podcast') {
     return [
-      `Today, let me take you into ${topic}.`,
+      `Today I want to talk about ${topic}.`,
       ...wordList.map((word, index) => sentenceFor(word, index)),
-      'By the end of the ride, the words did not feel like a list anymore. They felt like small handles for memory.'
+      `That's what I took away from that day. One moment at a time.`,
     ].join(' ');
   }
 
   return [
-    `Today, I was thinking about ${topic}.`,
+    `It started with ${topic}.`,
     ...wordList.map((word, index) => sentenceFor(word, index)),
-    'When I reviewed the story later, each word felt easier to recognize because it had already lived inside a simple scene.'
+    `By the time it was over, each word had found its place in the story.`,
   ].join(' ');
 };
 
