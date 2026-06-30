@@ -10,6 +10,8 @@
     "translate:local": "node scripts/translate-local.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1076.0",
+    "dotenv": "^17.4.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

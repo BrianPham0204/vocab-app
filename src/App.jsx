@@ -6,6 +6,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import SideCard from './components/SideCard';
 import { buildChoiceQuestion, buildWriteWordQuestion, normalizeText } from './utils/questions';
 import { requestTranslation } from './utils/translate';
+import { requestTtsAudio } from './utils/tts';
 
 const groupedTabs = [
   { id: 'mcq', label: 'Multiple Choice' },
@@ -400,6 +401,9 @@ export default function App() {
   const translateAbortRef = useRef(null);
   const translateCacheRef = useRef(new Map());
   const searchTranslateAbortRef = useRef(null);
+  const ttsAbortRef = useRef(null);
+  const ttsAudioRef = useRef(null);
+  const ttsObjectUrlRef = useRef(null);
   const translatePopupRef = useRef(null);
   const savedToastTimerRef = useRef(null);
   const sourceSlapTimerRef = useRef(null);
