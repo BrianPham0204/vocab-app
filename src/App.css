@@ -1264,6 +1264,64 @@ input {
   outline: none;
 }
 
+.speaking-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.speaking-status {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid #d8ebdd;
+  background: #fbfefb;
+}
+
+.speaking-status strong {
+  color: #244432;
+}
+
+.speaking-status p {
+  margin: 0;
+  color: #5b7c68;
+  font-size: 0.92rem;
+}
+
+.speaking-word-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.speaking-word-card {
+  min-width: 0;
+  border: 1px solid #d4e9da;
+  background: #fff;
+  color: #2f5e43;
+  padding: 11px 12px;
+  cursor: pointer;
+  text-align: left;
+  display: grid;
+  gap: 5px;
+}
+
+.speaking-word-card:hover,
+.speaking-word-card:focus {
+  background: #f2fbf5;
+  border-color: #9accab;
+  outline: none;
+}
+
+.speaking-word-card strong,
+.speaking-word-card span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.speaking-word-card span {
+  color: #5b7c68;
+  font-size: 0.9rem;
+}
 .options-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

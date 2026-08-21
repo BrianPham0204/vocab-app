@@ -11,6 +11,7 @@ import { requestTtsAudio } from './utils/tts';
 const groupedTabs = [
   { id: 'mcq', label: 'Multiple Choice' },
   { id: 'writing', label: 'Writing' },
+  { id: 'speaking', label: 'Speaking' },
   { id: 'story', label: 'Story' },
   { id: 'search', label: 'Search' },
   { id: 'library', label: 'Review & Log' }
@@ -57,7 +58,7 @@ const searchFieldOptions = [
   { id: 'example', label: 'EXAMPLE' },
   { id: 'translate', label: 'TRANSLATE' }
 ];
-const practiceTabs = ['en-to-vi', 'vi-to-en', 'mixed', 'write-word', 'translation'];
+const practiceTabs = ['en-to-vi', 'vi-to-en', 'mixed', 'write-word', 'translation', 'speaking'];
 const SCHEMA_FIELDS = [
   { key: 'vocabulary', label: 'Vocabulary', hint: 'Tu vung chinh' },
   { key: 'cat', label: 'CAT', hint: 'Nhom / loai de loc vocab' },
@@ -403,6 +404,7 @@ export default function App() {
   const activeTab = useMemo(() => {
     if (activeGroup === 'mcq') return mcqMode;
     if (activeGroup === 'writing') return writingMode;
+    if (activeGroup === 'speaking') return 'speaking';
     if (activeGroup === 'story') return 'story';
     if (activeGroup === 'search') return 'search';
     return libraryMode;
@@ -770,11 +772,13 @@ export default function App() {
           if (randomSpeakCancelRef.current) break;
           await speakAsync(item.vocabulary, 'en-US');
           if (randomSpeakCancelRef.current) break;
-          await waitForRandomSpeak(5000);
+          await waitForRandomSpeak(1500);
+          if (randomSpeakCancelRef.current) break;
+          await speakAsync(item.vocabulary, 'en-US');
+          if (randomSpeakCancelRef.current) break;
+          await waitForRandomSpeak(1500);
           if (randomSpeakCancelRef.current) break;
           await speakAsync(item.vietnamMeaning, 'vi-VN');
-          if (randomSpeakCancelRef.current) break;
-          await waitForRandomSpeak(2000);
         }
       }
     } finally {
@@ -833,10 +837,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (activeTab === 'translation' && !translationWords.length && practiceDataList.length) {
+    if ((activeTab === 'translation' || activeTab === 'speaking') && !translationWords.length && practiceDataList.length) {
       setTranslationWords(pickRandomVocabularyWords(translationWordCount));
     }
-    if (activeTab !== 'translation') {
+    if (activeTab !== 'speaking') {
       stopRandomPracticeRound();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -956,7 +960,7 @@ export default function App() {
   const writeWordIndex = quizState['write-word']?.index || 0;
 
   const currentQuestion = useMemo(() => {
-    if (activeTab === 'search' || activeTab === 'story') {
+    if (activeTab === 'search' || activeTab === 'story' || activeTab === 'speaking') {
       return null;
     }
     if (activeTab === 'translation') {
@@ -2120,6 +2124,8 @@ export default function App() {
     ? (mcqModes.find((m) => m.id === mcqMode)?.label || '')
     : activeGroup === 'writing'
       ? (writingModes.find((m) => m.id === writingMode)?.label || '')
+      : activeGroup === 'speaking'
+        ? 'Speaking Repeated'
       : activeGroup === 'story'
         ? 'Listening Story'
         : (libraryModes.find((m) => m.id === libraryMode)?.label || '');
@@ -2407,7 +2413,7 @@ export default function App() {
                     : activeModeLabel || currentQuestion?.title}
                 </h2>
               </div>
-              {activeGroup !== 'search' && activeGroup !== 'story' && (
+              {activeGroup !== 'search' && activeGroup !== 'story' && activeGroup !== 'speaking' && (
               <div className="mode-switch">
                 {(activeGroup === 'mcq' ? mcqModes : activeGroup === 'writing' ? writingModes : libraryModes).map((mode) => (
                   <button
@@ -2467,7 +2473,7 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {isPracticeTab && activeGroup !== 'writing' && (
+              {isPracticeTab && activeGroup !== 'writing' && activeGroup !== 'speaking' && (
                 <button
                   type="button"
                   className={`source-switch slap ${practiceSource === 'review' ? 'is-rev' : 'is-org'} ${sourceSlapActive ? 'is-slapping' : ''}`}
@@ -2520,31 +2526,77 @@ export default function App() {
                       <button
                         type="button"
                         className="ghost-button"
-                        onClick={() => {
-                          stopRandomPracticeRound();
-                          refreshTranslationWords(translationWordCount);
-                        }}
+                        onClick={() => refreshTranslationWords(translationWordCount)}
                       >
                         Random
                       </button>
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={speakRandomPracticeRound}
-                        disabled={randomSpeakPlaying || !(translationWords || []).length}
-                      >
-                        Play
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={stopRandomPracticeRound}
-                        disabled={!randomSpeakPlaying}
-                      >
-                        Stop
-                      </button>
                     </div>
                   )}
+                </div>
+              )}
+              {activeGroup === 'speaking' && (
+                <div className="writing-source-stack has-random-zone">
+                  <button
+                    type="button"
+                    className={`source-switch slap ${practiceSource === 'review' ? 'is-rev' : 'is-org'} ${sourceSlapActive ? 'is-slapping' : ''}`}
+                    onClick={() => handleSwitchPracticeSource(practiceSource === 'review' ? 'all' : 'review')}
+                    title={`Switch source (Review items: ${reviewItems.length})`}
+                    aria-label="Switch speaking source Org/Rev"
+                  >
+                    <span className="source-option org">Org</span>
+                    <span className="source-option rev">Rev</span>
+                    <span className="source-knob" />
+                  </button>
+                  <div className="translation-header-controls">
+                    <input
+                      id="speaking-word-count"
+                      type="number"
+                      min={1}
+                      max={50}
+                      step={1}
+                      value={translationWordCount}
+                      aria-label="Number of speaking words"
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '') return;
+                        const parsed = Number.parseInt(raw, 10);
+                        if (Number.isNaN(parsed)) return;
+                        setTranslationWordCount(Math.max(1, Math.min(50, parsed)));
+                      }}
+                      onBlur={(e) => {
+                        const parsed = Number.parseInt(e.target.value, 10);
+                        const safe = Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(50, parsed));
+                        setTranslationWordCount(safe);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => {
+                        stopRandomPracticeRound();
+                        refreshTranslationWords(translationWordCount);
+                      }}
+                    >
+                      Random
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={speakRandomPracticeRound}
+                      disabled={randomSpeakPlaying || !(translationWords || []).length}
+                    >
+                      Play
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={stopRandomPracticeRound}
+                      disabled={!randomSpeakPlaying}
+                    >
+                      Stop
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -2671,6 +2723,39 @@ export default function App() {
                     <div className="data-structure">
                       <p style={{ margin: 0 }}>Type to search across your vocabulary data.</p>
                     </div>
+                  )}
+                </div>
+              </div>
+            ) : activeTab === 'speaking' ? (
+              <div className="speaking-panel">
+                <div className="speaking-status">
+                  <span className="info-label">Speaking round</span>
+                  <strong>{randomSpeakPlaying ? 'Playing' : `${(translationWords || []).length} words ready`}</strong>
+                  <p>word - 1.5s - word - 1.5s - Vietnamese meaning</p>
+                </div>
+                <div className="data-structure translation-words-box">
+                  <span className="info-label">Words</span>
+                  {(translationWords || []).length ? (
+                    <div className="speaking-word-list">
+                      {translationWords.map((word) => {
+                        const detail = findDetailByVocabulary(word);
+                        return (
+                          <button
+                            key={word}
+                            type="button"
+                            className="speaking-word-card"
+                            onMouseEnter={() => setHoveredOption(word)}
+                            onFocus={() => setHoveredOption(word)}
+                            onTouchStart={() => setHoveredOption(word)}
+                          >
+                            <strong>{formatWordWithType(word, detail)}</strong>
+                            <span>{detail?.vietnamMeaning || '—'}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p>—</p>
                   )}
                 </div>
               </div>
