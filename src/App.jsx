@@ -353,6 +353,8 @@ export default function App() {
     text: '',
     translatedText: '',
     source: '',
+    wordType: '',
+    matchedWord: '',
     loading: false,
     error: '',
     mode: 'floating',
@@ -364,6 +366,7 @@ export default function App() {
   const [sourceSlapActive, setSourceSlapActive] = useState(false);
   const [translationWordCount, setTranslationWordCount] = useState(5);
   const [translationWords, setTranslationWords] = useState([]);
+  const [randomSpeakPlaying, setRandomSpeakPlaying] = useState(false);
   const [storySource, setStorySource] = useState('all');
   const [storyWordCount, setStoryWordCount] = useState(8);
   const [storyFormat, setStoryFormat] = useState('narrative');
@@ -421,6 +424,7 @@ export default function App() {
   const writeWordInputRef = useRef(null);
   const shouldRefocusWriteWordRef = useRef(false);
   const shouldAutoSpeakNextRef = useRef(false);
+  const randomSpeakCancelRef = useRef(false);
   
   const reviewSourceData = useMemo(() => {
     const list = Array.isArray(reviewList) ? reviewList : [];
@@ -719,6 +723,70 @@ export default function App() {
     updateTabState('translation', { input: '', checked: false, feedback: '' });
   };
 
+  const getVocabularyPracticeItem = (word) => {
+    const target = normalizeText(word);
+    if (!target) return null;
+    return (practiceDataList || []).find((item) => normalizeText(item?.vocabulary || '') === target)
+      || normalizedDataList.find((item) => normalizeText(item?.vocabulary || '') === target)
+      || null;
+  };
+
+  const getTranslationSpeakItems = (words = translationWords) => {
+    const sourceWords = Array.isArray(words) && words.length
+      ? words
+      : pickRandomVocabularyWords(translationWordCount);
+    return sourceWords
+      .map((word) => getVocabularyPracticeItem(word))
+      .filter((item) => String(item?.vocabulary || '').trim() && String(item?.vietnamMeaning || '').trim());
+  };
+
+  const waitForRandomSpeak = (ms) => new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+
+  const speakRandomPracticeRound = async () => {
+    if (randomSpeakPlaying) return;
+    const items = getTranslationSpeakItems();
+    if (!items.length) return;
+    randomSpeakCancelRef.current = false;
+    setRandomSpeakPlaying(true);
+    try { window.speechSynthesis?.cancel(); } catch (_) {}
+
+    const speakAsync = (text, lang) => new Promise((resolve) => {
+      if (randomSpeakCancelRef.current || !text) {
+        resolve();
+        return;
+      }
+      const utter = new SpeechSynthesisUtterance(String(text));
+      utter.lang = lang || 'en-US';
+      utter.onend = resolve;
+      utter.onerror = resolve;
+      window.speechSynthesis.speak(utter);
+    });
+
+    try {
+      while (!randomSpeakCancelRef.current) {
+        for (const item of items) {
+          if (randomSpeakCancelRef.current) break;
+          await speakAsync(item.vocabulary, 'en-US');
+          if (randomSpeakCancelRef.current) break;
+          await waitForRandomSpeak(5000);
+          if (randomSpeakCancelRef.current) break;
+          await speakAsync(item.vietnamMeaning, 'vi-VN');
+          if (randomSpeakCancelRef.current) break;
+          await waitForRandomSpeak(2000);
+        }
+      }
+    } finally {
+      setRandomSpeakPlaying(false);
+    }
+  };
+
+  const stopRandomPracticeRound = () => {
+    randomSpeakCancelRef.current = true;
+    setRandomSpeakPlaying(false);
+    try { window.speechSynthesis?.cancel(); } catch (_) {}
+  };
   const pickRandomStoryItems = (requestedCount = storyWordCount) => {
     const pool = storyDataList.filter((item) => String(item?.vocabulary || '').trim());
     const unique = [];
@@ -767,6 +835,9 @@ export default function App() {
   useEffect(() => {
     if (activeTab === 'translation' && !translationWords.length && practiceDataList.length) {
       setTranslationWords(pickRandomVocabularyWords(translationWordCount));
+    }
+    if (activeTab !== 'translation') {
+      stopRandomPracticeRound();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, practiceDataList, practiceSource]);
@@ -1092,6 +1163,19 @@ export default function App() {
     };
   };
 
+  const findLocalVocabularyMeta = (text) => {
+    const normalized = normalizeText(text);
+    if (!normalized) return null;
+
+    return normalizedDataList.find((item) => {
+      const values = [
+        item?.vocabulary,
+        item?.vietnamMeaning,
+        item?.synonym
+      ].map((value) => normalizeText(value || '')).filter(Boolean);
+      return values.includes(normalized);
+    }) || null;
+  };
   const updateWordRangeField = (field, value) => {
     const digitsOnly = String(value || '').replace(/[^\d]/g, '');
     setWordRange((prev) => ({ ...(prev || {}), [field]: digitsOnly }));
@@ -1115,6 +1199,9 @@ export default function App() {
 
     const { text, rect } = selectionPayload;
     const placement = buildPopoverPlacement(rect);
+    const localMeta = findLocalVocabularyMeta(text);
+    const rawType = String(localMeta?.type || '').trim();
+    const wordType = rawType.replace(/^\((.*)\)$/, '$1').trim();
     const cacheKey = `${translateConfig?.sourceLang || 'en'}:${translateConfig?.targetLang || 'vi'}:${normalizeText(text)}`;
     const cached = translateCacheRef.current.get(cacheKey);
 
@@ -1123,6 +1210,8 @@ export default function App() {
       text,
       translatedText: cached?.translatedText || '',
       source: cached?.provider || '',
+      wordType,
+      matchedWord: localMeta?.vocabulary || '',
       loading: !cached,
       error: '',
       ...placement
@@ -1152,6 +1241,8 @@ export default function App() {
         open: true,
         translatedText: apiResult.translatedText,
         source: apiResult.provider,
+        wordType,
+        matchedWord: localMeta?.vocabulary || '',
         loading: false,
         error: ''
       }));
@@ -1166,6 +1257,8 @@ export default function App() {
           open: true,
           translatedText: localResult.translatedText,
           source: localResult.provider,
+          wordType,
+          matchedWord: localMeta?.vocabulary || '',
           loading: false,
           error: ''
         }));
@@ -1177,6 +1270,8 @@ export default function App() {
         open: true,
         translatedText: '',
         source: '',
+        wordType,
+        matchedWord: localMeta?.vocabulary || '',
         loading: false,
         error: translateConfig?.endpoint
           ? 'Khong the lay ban dich tu endpoint hien tai.'
@@ -1681,6 +1776,8 @@ export default function App() {
     if (sourceSlapTimerRef.current) {
       clearTimeout(sourceSlapTimerRef.current);
     }
+    randomSpeakCancelRef.current = true;
+    try { window.speechSynthesis?.cancel(); } catch (_) {}
   }, []);
 
   const handlePrev = () => {
@@ -1944,11 +2041,7 @@ export default function App() {
     );
   };
   const findDetailByVocabulary = (word) => {
-    const target = normalizeText(word);
-    if (!target) return null;
-    return (practiceDataList || []).find((item) => normalizeText(item?.vocabulary || '') === target)
-      || normalizedDataList.find((item) => normalizeText(item?.vocabulary || '') === target)
-      || null;
+    return getVocabularyPracticeItem(word);
   };
   const mobilePromptContent = useMemo(() => {
     if (!currentQuestion) return { primary: '', secondary: '' };
@@ -2424,7 +2517,32 @@ export default function App() {
                           setTranslationWordCount(safe);
                         }}
                       />
-                      <button type="button" className="ghost-button" onClick={() => refreshTranslationWords(translationWordCount)}>Random</button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => {
+                          stopRandomPracticeRound();
+                          refreshTranslationWords(translationWordCount);
+                        }}
+                      >
+                        Random
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={speakRandomPracticeRound}
+                        disabled={randomSpeakPlaying || !(translationWords || []).length}
+                      >
+                        Play
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={stopRandomPracticeRound}
+                        disabled={!randomSpeakPlaying}
+                      >
+                        Stop
+                      </button>
                     </div>
                   )}
                 </div>
@@ -3021,6 +3139,12 @@ export default function App() {
           </div>
           <div className="translate-popover-body">
             <p className="translate-selection">{translatePopover.text}</p>
+            {translatePopover.wordType ? (
+              <p className="translate-word-type">
+                {translatePopover.matchedWord ? `${translatePopover.matchedWord}: ` : ''}
+                {translatePopover.wordType}
+              </p>
+            ) : null}
             {translatePopover.loading ? (
               <p className="translate-muted">Dang dich...</p>
             ) : translatePopover.error ? (

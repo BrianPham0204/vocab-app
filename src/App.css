@@ -396,6 +396,7 @@ input {
 
 .translation-header-controls {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
@@ -1360,6 +1361,13 @@ input {
   font-weight: 700;
   color: #173327;
   word-break: break-word;
+}
+
+.translate-word-type {
+  margin: -4px 0 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #5b7c68;
 }
 
 .translate-result {
