@@ -8,6 +8,8 @@ import { buildChoiceQuestion, buildWriteWordQuestion, normalizeText } from './ut
 import { requestTranslation } from './utils/translate';
 import { requestTtsAudio } from './utils/tts';
 
+const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1mVSZiur6rR9fBnMRPqLDSqrifFKgGEIYw-Rza_UZELc/edit?gid=1142593962#gid=1142593962';
+
 const groupedTabs = [
   { id: 'mcq', label: 'Multiple Choice' },
   { id: 'writing', label: 'Writing' },
@@ -303,7 +305,7 @@ const buildLocalStoryDraft = ({ items, format, context }) => {
 
 export default function App() {
   // persisted settings and data
-  const [sheetUrl, setSheetUrl] = useLocalStorage('vocab_sheet_url', '');
+  const [sheetUrl, setSheetUrl] = useLocalStorage('vocab_sheet_url', DEFAULT_SHEET_URL);
   const [mapping, setMapping] = useLocalStorage('vocab_mapping', {
     vocabulary: '',
     cat: '',
@@ -474,6 +476,12 @@ export default function App() {
   useEffect(() => {
     mappingRef.current = mapping;
   }, [mapping]);
+
+  useEffect(() => {
+    if (String(sheetUrl || '').trim()) return;
+    setSheetUrl(DEFAULT_SHEET_URL);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetUrl]);
 
   const categoryOptions = useMemo(() => buildCategoryOptions(), []);
   const normalizedSelectedCategories = useMemo(
