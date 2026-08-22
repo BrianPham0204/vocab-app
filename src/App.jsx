@@ -830,14 +830,14 @@ export default function App() {
     setRandomSpeakPlaying(true);
     try { window.speechSynthesis?.cancel(); } catch (_) {}
 
-    const speakAsync = (text, lang) => new Promise((resolve) => {
+    const speakAsync = (text, lang, rate = 1) => new Promise((resolve) => {
       if (randomSpeakCancelRef.current || !text) {
         resolve();
         return;
       }
       const utter = new SpeechSynthesisUtterance(String(text));
       utter.lang = lang || 'en-US';
-      utter.rate = speakingSpeedRef.current;
+      utter.rate = rate;
       utter.onend = resolve;
       utter.onerror = resolve;
       window.speechSynthesis.speak(utter);
@@ -850,7 +850,7 @@ export default function App() {
           await waitForRandomSpeak(420);
           continue;
         }
-        await speakAsync(char, 'en-US');
+        await speakAsync(char, 'en-US', speakingSpeedRef.current);
       }
     };
 
@@ -1046,7 +1046,7 @@ export default function App() {
   }, [effectiveRangeStart, effectiveRangeEnd, normalizedSelectedCategories]);
 
   useEffect(() => {
-    // fetch preview & suggest mapping when sheetUrl set (exposed as Preview button)
+    // Fetch preview and load vocabulary whenever a sheet URL is available.
     const fetchSheetPreview = async () => {
       if (!sheetUrl) {
         setSheetHeaders([]);
@@ -1059,11 +1059,16 @@ export default function App() {
         const { headers, rows } = parseCSV(txt);
         setSheetHeaders(headers || []);
         setSheetPreviewRows((rows && rows.slice(0, 5)) || []);
-        setMapping((m) => {
-          const next = resolveMappingForHeaders(headers, m);
-          mappingRef.current = next;
-          return next;
-        });
+        const resolvedMapping = resolveMappingForHeaders(headers, mappingRef.current || mapping);
+        mappingRef.current = resolvedMapping;
+        setMapping(resolvedMapping);
+        const mapped = mapSheetRowsToData(rows || [], resolvedMapping);
+        if (mapped.length) {
+          setDataList(mapped);
+          setQuizState(createDefaultQuizState());
+          setDisabledMap(createDefaultDisabledMap());
+          setTranslationWords([]);
+        }
       } catch (e) {
         console.error('Failed to fetch sheet preview:', e);
         setSheetHeaders([]);
