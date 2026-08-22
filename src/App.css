@@ -1458,6 +1458,37 @@ input {
   line-height: 1.35;
 }
 
+.speaking-word-navigator {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.speaking-word-position {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid #d8ebdd;
+  background: #f6fcf8;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.speaking-word-position strong {
+  max-width: 100%;
+  color: #183f2a;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.speaking-word-position span {
+  color: #6a8172;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
 .speaking-toggle {
   display: inline-flex;
   align-items: center;

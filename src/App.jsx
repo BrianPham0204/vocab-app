@@ -369,6 +369,7 @@ export default function App() {
   const [sourceSlapActive, setSourceSlapActive] = useState(false);
   const [translationWordCount, setTranslationWordCount] = useState(5);
   const [translationWords, setTranslationWords] = useState([]);
+  const [speakingWordIndex, setSpeakingWordIndex] = useState(0);
   const [randomSpeakPlaying, setRandomSpeakPlaying] = useState(false);
   const [randomSpeakCurrentWord, setRandomSpeakCurrentWord] = useState('');
   const [speakingSpellEnabled, setSpeakingSpellEnabled] = useLocalStorage('vocab_speaking_spell_enabled', false);
@@ -770,6 +771,7 @@ export default function App() {
   const refreshSpeakingWords = () => {
     stopRandomPracticeRound();
     setTranslationWords(pickAllVocabularyWordsShuffled());
+    setSpeakingWordIndex(0);
   };
 
   const getVocabularyPracticeItem = (word) => {
@@ -854,8 +856,9 @@ export default function App() {
 
     try {
       while (!randomSpeakCancelRef.current) {
-        for (const item of items) {
+        for (const [itemIndex, item] of items.entries()) {
           if (randomSpeakCancelRef.current) break;
+          setSpeakingWordIndex(itemIndex);
           setRandomSpeakCurrentWord(item.vocabulary);
           await speakAsync(item.vocabulary, 'en-US');
           if (randomSpeakCancelRef.current) break;
@@ -885,6 +888,17 @@ export default function App() {
     setRandomSpeakPlaying(false);
     setRandomSpeakCurrentWord('');
     try { window.speechSynthesis?.cancel(); } catch (_) {}
+  };
+
+  const moveSpeakingWord = (direction) => {
+    const total = (translationWords || []).length;
+    if (!total) return;
+    stopRandomPracticeRound();
+    setHoveredOption(null);
+    setSpeakingWordIndex((prev) => {
+      const current = Math.min(Math.max(Number(prev) || 0, 0), total - 1);
+      return Math.min(Math.max(current + direction, 0), total - 1);
+    });
   };
   const pickRandomStoryItems = (requestedCount = storyWordCount) => {
     const pool = storyDataList.filter((item) => String(item?.vocabulary || '').trim());
@@ -943,6 +957,14 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, practiceDataList, practiceSource]);
+
+  useEffect(() => {
+    const total = (translationWords || []).length;
+    setSpeakingWordIndex((prev) => {
+      if (!total) return 0;
+      return Math.min(Math.max(Number(prev) || 0, 0), total - 1);
+    });
+  }, [translationWords.length]);
 
   useEffect(() => {
     if (activeTab === 'story' && !storyItems.length && storyDataList.length) {
@@ -2145,7 +2167,8 @@ export default function App() {
   const findDetailByVocabulary = (word) => {
     return getVocabularyPracticeItem(word);
   };
-  const speakingFocusWord = randomSpeakCurrentWord || hoveredOption || translationWords[0] || '';
+  const speakingSelectedWord = (translationWords || [])[Math.min(Math.max(speakingWordIndex, 0), Math.max((translationWords || []).length - 1, 0))] || '';
+  const speakingFocusWord = randomSpeakCurrentWord || hoveredOption || speakingSelectedWord || '';
   const speakingFocusDetail = findDetailByVocabulary(speakingFocusWord);
   const renderSpeakingDetailCard = () => {
     const detail = speakingFocusDetail;
@@ -2154,7 +2177,7 @@ export default function App() {
         <div className="speaking-detail-card empty">
           <span className="info-label">Speaking detail</span>
           <strong>No word selected</strong>
-          <p>Hover a speaking card or press Play to show the current word detail here.</p>
+          <p>Press Random to build a speaking list, then use Previous and Next to move through it.</p>
         </div>
       );
     }
@@ -2885,35 +2908,32 @@ export default function App() {
               <div className="speaking-panel">
                 {renderSpeakingDetailCard()}
                 <div className="data-structure translation-words-box">
-                  <span className="info-label">Words</span>
+                  <span className="info-label">Words navigation</span>
                   {(translationWords || []).length ? (
-                    <div className="speaking-word-list">
-                      {translationWords.map((word) => {
-                        const detail = findDetailByVocabulary(word);
-                        return (
-                          <button
-                            key={word}
-                            type="button"
-                            className={`speaking-word-card ${normalizeText(randomSpeakCurrentWord) === normalizeText(word) ? 'is-current' : ''}`}
-                            onMouseEnter={() => setHoveredOption(word)}
-                            onFocus={() => setHoveredOption(word)}
-                            onTouchStart={() => setHoveredOption(word)}
-                          >
-                            <div className="speaking-word-main">
-                              <strong>{word || '—'}</strong>
-                              {detail?.type ? <span className="speaking-type">{String(detail.type).replace(/^\((.*)\)$/, '$1')}</span> : null}
-                            </div>
-                            {detail?.pronun ? <span className="speaking-pronun">{detail.pronun}</span> : null}
-                            <span className="speaking-meaning">{detail?.vietnamMeaning || '—'}</span>
-                            {speakingSpellEnabled ? (
-                              <small className="speaking-spelling">{getSpellingTextForWord(word) || '—'}</small>
-                            ) : null}
-                          </button>
-                        );
-                      })}
+                    <div className="speaking-word-navigator">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => moveSpeakingWord(-1)}
+                        disabled={speakingWordIndex <= 0}
+                      >
+                        Previous
+                      </button>
+                      <div className="speaking-word-position" aria-live="polite">
+                        <strong>{speakingSelectedWord || '-'}</strong>
+                        <span>{Math.min(speakingWordIndex + 1, translationWords.length)} / {translationWords.length}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => moveSpeakingWord(1)}
+                        disabled={speakingWordIndex >= translationWords.length - 1}
+                      >
+                        Next
+                      </button>
                     </div>
                   ) : (
-                    <p>—</p>
+                    <p>-</p>
                   )}
                 </div>
               </div>
