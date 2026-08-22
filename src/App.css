@@ -1272,9 +1272,10 @@ input {
 .speaking-status {
   display: grid;
   gap: 6px;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid #d8ebdd;
-  background: #fbfefb;
+  background: linear-gradient(180deg, #fbfefb 0%, #f1faf4 100%);
+  border-radius: 8px;
 }
 
 .speaking-status strong {
@@ -1289,20 +1290,22 @@ input {
 
 .speaking-word-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
 }
 
 .speaking-word-card {
   min-width: 0;
   border: 1px solid #d4e9da;
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fdf9 100%);
   color: #2f5e43;
-  padding: 11px 12px;
+  border-radius: 8px;
+  padding: 14px;
   cursor: pointer;
   text-align: left;
   display: grid;
-  gap: 5px;
+  gap: 8px;
+  box-shadow: 0 10px 20px rgba(54, 104, 70, 0.06);
 }
 
 .speaking-word-card:hover,
@@ -1310,17 +1313,102 @@ input {
   background: #f2fbf5;
   border-color: #9accab;
   outline: none;
+  transform: translateY(-1px);
 }
 
-.speaking-word-card strong,
-.speaking-word-card span {
+.speaking-word-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.speaking-word-main strong,
+.speaking-word-card span,
+.speaking-word-card small {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.speaking-word-card span {
+.speaking-word-main strong {
+  color: #183f2a;
+  font-size: 1.08rem;
+}
+
+.speaking-type {
+  flex: 0 0 auto;
+  border: 1px solid #c7e2cf;
+  background: #edf8f1;
+  color: #3e7250;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.speaking-pronun {
+  color: #6a8172;
+  font-size: 0.82rem;
+}
+
+.speaking-meaning {
   color: #5b7c68;
-  font-size: 0.9rem;
+  font-size: 0.94rem;
+  line-height: 1.35;
+}
+
+.speaking-spelling {
+  color: #3f674e;
+  background: #edf8f1;
+  border-left: 3px solid #9accab;
+  padding: 6px 8px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.speaking-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #315843;
+  font-weight: 800;
+  font-size: 0.82rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.speaking-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.speaking-toggle-track {
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: #d8e9dd;
+  padding: 3px;
+  transition: background 0.16s ease;
+}
+
+.speaking-toggle-knob {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  display: block;
+  box-shadow: 0 2px 5px rgba(45, 80, 58, 0.18);
+  transition: transform 0.16s ease;
+}
+
+.speaking-toggle input:checked + .speaking-toggle-track {
+  background: #74bf8b;
+}
+
+.speaking-toggle input:checked + .speaking-toggle-track .speaking-toggle-knob {
+  transform: translateX(16px);
 }
 .options-grid {
   display: grid;

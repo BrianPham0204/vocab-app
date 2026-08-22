@@ -370,6 +370,7 @@ export default function App() {
   const [translationWordCount, setTranslationWordCount] = useState(5);
   const [translationWords, setTranslationWords] = useState([]);
   const [randomSpeakPlaying, setRandomSpeakPlaying] = useState(false);
+  const [speakingSpellEnabled, setSpeakingSpellEnabled] = useLocalStorage('vocab_speaking_spell_enabled', false);
   const [storySource, setStorySource] = useState('all');
   const [storyWordCount, setStoryWordCount] = useState(8);
   const [storyFormat, setStoryFormat] = useState('narrative');
@@ -429,6 +430,7 @@ export default function App() {
   const shouldRefocusWriteWordRef = useRef(false);
   const shouldAutoSpeakNextRef = useRef(false);
   const randomSpeakCancelRef = useRef(false);
+  const speakingSpellEnabledRef = useRef(false);
   
   const reviewSourceData = useMemo(() => {
     const list = Array.isArray(reviewList) ? reviewList : [];
@@ -476,6 +478,10 @@ export default function App() {
   useEffect(() => {
     mappingRef.current = mapping;
   }, [mapping]);
+
+  useEffect(() => {
+    speakingSpellEnabledRef.current = !!speakingSpellEnabled;
+  }, [speakingSpellEnabled]);
 
   useEffect(() => {
     if (String(sheetUrl || '').trim()) return;
@@ -754,6 +760,13 @@ export default function App() {
     window.setTimeout(resolve, ms);
   });
 
+  const buildSpellingText = (word) => (
+    String(word || '')
+      .trim()
+      .split('')
+      .filter((char) => /[a-z]/i.test(char))
+      .join(', ')
+  );
   const speakRandomPracticeRound = async () => {
     if (randomSpeakPlaying) return;
     const items = getTranslationSpeakItems();
@@ -784,6 +797,13 @@ export default function App() {
           if (randomSpeakCancelRef.current) break;
           await speakAsync(item.vocabulary, 'en-US');
           if (randomSpeakCancelRef.current) break;
+          if (speakingSpellEnabledRef.current) {
+            await waitForRandomSpeak(1500);
+            if (randomSpeakCancelRef.current) break;
+            const spellingText = buildSpellingText(item.vocabulary);
+            if (spellingText) await speakAsync(spellingText, 'en-US');
+            if (randomSpeakCancelRef.current) break;
+          }
           await waitForRandomSpeak(1500);
           if (randomSpeakCancelRef.current) break;
           await speakAsync(item.vietnamMeaning, 'vi-VN');
@@ -2604,6 +2624,17 @@ export default function App() {
                     >
                       Stop
                     </button>
+                    <label className="speaking-toggle" title="Add spelling between the repeated word and Vietnamese meaning">
+                      <input
+                        type="checkbox"
+                        checked={!!speakingSpellEnabled}
+                        onChange={(e) => setSpeakingSpellEnabled(e.target.checked)}
+                      />
+                      <span className="speaking-toggle-track">
+                        <span className="speaking-toggle-knob" />
+                      </span>
+                      <span>Spell</span>
+                    </label>
                   </div>
                 </div>
               )}
@@ -2739,7 +2770,11 @@ export default function App() {
                 <div className="speaking-status">
                   <span className="info-label">Speaking round</span>
                   <strong>{randomSpeakPlaying ? 'Playing' : `${(translationWords || []).length} words ready`}</strong>
-                  <p>word - 1.5s - word - 1.5s - Vietnamese meaning</p>
+                  <p>
+                    {speakingSpellEnabled
+                      ? 'word - 1.5s - word - 1.5s - spelling - 1.5s - Vietnamese meaning'
+                      : 'word - 1.5s - word - 1.5s - Vietnamese meaning'}
+                  </p>
                 </div>
                 <div className="data-structure translation-words-box">
                   <span className="info-label">Words</span>
@@ -2756,8 +2791,15 @@ export default function App() {
                             onFocus={() => setHoveredOption(word)}
                             onTouchStart={() => setHoveredOption(word)}
                           >
-                            <strong>{formatWordWithType(word, detail)}</strong>
-                            <span>{detail?.vietnamMeaning || '—'}</span>
+                            <div className="speaking-word-main">
+                              <strong>{word || '—'}</strong>
+                              {detail?.type ? <span className="speaking-type">{String(detail.type).replace(/^\((.*)\)$/, '$1')}</span> : null}
+                            </div>
+                            {detail?.pronun ? <span className="speaking-pronun">{detail.pronun}</span> : null}
+                            <span className="speaking-meaning">{detail?.vietnamMeaning || '—'}</span>
+                            {speakingSpellEnabled ? (
+                              <small className="speaking-spelling">{buildSpellingText(word) || '—'}</small>
+                            ) : null}
                           </button>
                         );
                       })}
