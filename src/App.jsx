@@ -372,6 +372,7 @@ export default function App() {
   const [randomSpeakPlaying, setRandomSpeakPlaying] = useState(false);
   const [randomSpeakCurrentWord, setRandomSpeakCurrentWord] = useState('');
   const [speakingSpellEnabled, setSpeakingSpellEnabled] = useLocalStorage('vocab_speaking_spell_enabled', false);
+  const [speakingSpellingMap, setSpeakingSpellingMap] = useLocalStorage('vocab_speaking_spelling_map', {});
   const [storySource, setStorySource] = useState('all');
   const [storyWordCount, setStoryWordCount] = useState(8);
   const [storyFormat, setStoryFormat] = useState('narrative');
@@ -432,6 +433,7 @@ export default function App() {
   const shouldAutoSpeakNextRef = useRef(false);
   const randomSpeakCancelRef = useRef(false);
   const speakingSpellEnabledRef = useRef(false);
+  const speakingSpellingMapRef = useRef({});
   
   const reviewSourceData = useMemo(() => {
     const list = Array.isArray(reviewList) ? reviewList : [];
@@ -483,6 +485,10 @@ export default function App() {
   useEffect(() => {
     speakingSpellEnabledRef.current = !!speakingSpellEnabled;
   }, [speakingSpellEnabled]);
+
+  useEffect(() => {
+    speakingSpellingMapRef.current = speakingSpellingMap || {};
+  }, [speakingSpellingMap]);
 
   useEffect(() => {
     if (String(sheetUrl || '').trim()) return;
@@ -765,10 +771,29 @@ export default function App() {
     String(word || '')
       .trim()
       .split('')
-      .map((char) => (char.trim() ? char : 'space'))
-      .filter((char) => /[a-z]/i.test(char) || char === 'space')
+      .filter((char) => /[a-z0-9\s]/i.test(char))
       .join(' ')
   );
+  const getSpellingTextForWord = (word, sourceMap = speakingSpellingMap) => {
+    const key = normalizeText(word);
+    const custom = String(sourceMap?.[key] || '').trim();
+    return custom || buildSpellingText(word);
+  };
+
+  const updateSpellingTextForWord = (word, value) => {
+    const key = normalizeText(word);
+    if (!key) return;
+    setSpeakingSpellingMap((prev) => {
+      const next = { ...(prev || {}) };
+      const cleaned = String(value || '').replace(/[^\p{L}\p{N}\s]/gu, '');
+      if (cleaned.trim()) {
+        next[key] = cleaned;
+      } else {
+        delete next[key];
+      }
+      return next;
+    });
+  };
   const speakRandomPracticeRound = async () => {
     if (randomSpeakPlaying) return;
     const items = getTranslationSpeakItems();
@@ -788,6 +813,17 @@ export default function App() {
       utter.onerror = resolve;
       window.speechSynthesis.speak(utter);
     });
+    const speakSpellingAsync = async (text) => {
+      const chars = Array.from(String(text || ''));
+      for (const char of chars) {
+        if (randomSpeakCancelRef.current) break;
+        if (!char.trim()) {
+          await waitForRandomSpeak(420);
+          continue;
+        }
+        await speakAsync(char, 'en-US');
+      }
+    };
 
     try {
       while (!randomSpeakCancelRef.current) {
@@ -803,8 +839,8 @@ export default function App() {
           if (speakingSpellEnabledRef.current) {
             await waitForRandomSpeak(1500);
             if (randomSpeakCancelRef.current) break;
-            const spellingText = buildSpellingText(item.vocabulary);
-            if (spellingText) await speakAsync(spellingText, 'en-US');
+            const spellingText = getSpellingTextForWord(item.vocabulary, speakingSpellingMapRef.current);
+            if (spellingText) await speakSpellingAsync(spellingText);
             if (randomSpeakCancelRef.current) break;
           }
           await waitForRandomSpeak(1500);
@@ -2095,7 +2131,9 @@ export default function App() {
 
     const word = String(detail?.vocabulary || speakingFocusWord || '').trim();
     const type = String(detail?.type || '').replace(/^\((.*)\)$/, '$1').trim();
-    const spelling = buildSpellingText(word);
+    const spelling = getSpellingTextForWord(word);
+    const spellingKey = normalizeText(word);
+    const customSpelling = String(speakingSpellingMap?.[spellingKey] || '');
     return (
       <div className="speaking-detail-card">
         <div className="speaking-detail-top">
@@ -2122,6 +2160,16 @@ export default function App() {
           <strong>Example</strong>
           <p>{detail?.sentences?.en || '—'}</p>
         </div>
+        <label className="speaking-spelling-editor">
+          <span>Manual spelling</span>
+          <input
+            type="text"
+            value={customSpelling}
+            placeholder={buildSpellingText(word)}
+            onChange={(e) => updateSpellingTextForWord(word, e.target.value)}
+          />
+          <small>Spaces create pauses while spelling.</small>
+        </label>
       </div>
     );
   };
@@ -2840,7 +2888,7 @@ export default function App() {
                             {detail?.pronun ? <span className="speaking-pronun">{detail.pronun}</span> : null}
                             <span className="speaking-meaning">{detail?.vietnamMeaning || '—'}</span>
                             {speakingSpellEnabled ? (
-                              <small className="speaking-spelling">{buildSpellingText(word) || '—'}</small>
+                              <small className="speaking-spelling">{getSpellingTextForWord(word) || '—'}</small>
                             ) : null}
                           </button>
                         );

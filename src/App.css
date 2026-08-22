@@ -1340,6 +1340,39 @@ input {
   line-height: 1.45;
 }
 
+
+.speaking-spelling-editor {
+  display: grid;
+  gap: 6px;
+}
+
+.speaking-spelling-editor span {
+  color: #315843;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.speaking-spelling-editor input {
+  width: 100%;
+  border: 1px solid #d4e9da;
+  background: #fff;
+  color: #244432;
+  border-radius: 8px;
+  padding: 10px 11px;
+  outline: none;
+}
+
+.speaking-spelling-editor input:focus {
+  border-color: #73bf8a;
+  box-shadow: 0 0 0 4px rgba(115, 191, 138, 0.15);
+}
+
+.speaking-spelling-editor small {
+  color: #6a8172;
+  font-size: 0.78rem;
+}
+
 .speaking-word-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
