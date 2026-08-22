@@ -872,6 +872,8 @@ export default function App() {
             const spellingText = getSpellingTextForWord(item.vocabulary, speakingSpellingMapRef.current);
             if (spellingText) await speakSpellingAsync(spellingText);
             if (randomSpeakCancelRef.current) break;
+            await speakAsync(item.vocabulary, 'en-US');
+            if (randomSpeakCancelRef.current) break;
           }
           await waitForRandomSpeak(1500);
           if (randomSpeakCancelRef.current) break;
