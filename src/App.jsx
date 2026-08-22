@@ -373,6 +373,7 @@ export default function App() {
   const [randomSpeakCurrentWord, setRandomSpeakCurrentWord] = useState('');
   const [speakingSpellEnabled, setSpeakingSpellEnabled] = useLocalStorage('vocab_speaking_spell_enabled', false);
   const [speakingSpellingMap, setSpeakingSpellingMap] = useLocalStorage('vocab_speaking_spelling_map', {});
+  const [speakingSpeed, setSpeakingSpeed] = useLocalStorage('vocab_speaking_speed', 1);
   const [storySource, setStorySource] = useState('all');
   const [storyWordCount, setStoryWordCount] = useState(8);
   const [storyFormat, setStoryFormat] = useState('narrative');
@@ -434,6 +435,7 @@ export default function App() {
   const randomSpeakCancelRef = useRef(false);
   const speakingSpellEnabledRef = useRef(false);
   const speakingSpellingMapRef = useRef({});
+  const speakingSpeedRef = useRef(1);
   
   const reviewSourceData = useMemo(() => {
     const list = Array.isArray(reviewList) ? reviewList : [];
@@ -489,6 +491,11 @@ export default function App() {
   useEffect(() => {
     speakingSpellingMapRef.current = speakingSpellingMap || {};
   }, [speakingSpellingMap]);
+
+  useEffect(() => {
+    const parsed = Number(speakingSpeed);
+    speakingSpeedRef.current = Number.isFinite(parsed) ? Math.min(1.5, Math.max(0.6, parsed)) : 1;
+  }, [speakingSpeed]);
 
   useEffect(() => {
     if (String(sheetUrl || '').trim()) return;
@@ -720,7 +727,7 @@ export default function App() {
     updateTabState(activeTab, (activeTab === 'write-word' || activeTab === 'translation')
       ? { index: 0, input: '', checked: false, feedback: '' }
       : { index: 0, selected: '', checked: false, feedback: '' });
-    if (activeTab === 'translation') {
+    if (activeTab === 'translation' || activeTab === 'speaking') {
       setTranslationWords([]);
     }
   }, [activeTab, isPracticeTab, practiceSource, reviewSourceData.length]);
@@ -740,10 +747,29 @@ export default function App() {
     return shuffled.slice(0, safeCount);
   };
 
+
+  const pickAllVocabularyWordsShuffled = () => {
+    const pool = practiceDataList
+      .map((it) => String(it?.vocabulary || '').trim())
+      .filter(Boolean);
+    const shuffled = Array.from(new Set(pool));
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
   const refreshTranslationWords = (requestedCount = translationWordCount) => {
     const words = pickRandomVocabularyWords(requestedCount);
     setTranslationWords(words);
     updateTabState('translation', { input: '', checked: false, feedback: '' });
+  };
+
+
+  const refreshSpeakingWords = () => {
+    stopRandomPracticeRound();
+    setTranslationWords(pickAllVocabularyWordsShuffled());
   };
 
   const getVocabularyPracticeItem = (word) => {
@@ -757,7 +783,7 @@ export default function App() {
   const getTranslationSpeakItems = (words = translationWords) => {
     const sourceWords = Array.isArray(words) && words.length
       ? words
-      : pickRandomVocabularyWords(translationWordCount);
+      : pickAllVocabularyWordsShuffled();
     return sourceWords
       .map((word) => getVocabularyPracticeItem(word))
       .filter((item) => String(item?.vocabulary || '').trim() && String(item?.vietnamMeaning || '').trim());
@@ -809,6 +835,7 @@ export default function App() {
       }
       const utter = new SpeechSynthesisUtterance(String(text));
       utter.lang = lang || 'en-US';
+      utter.rate = speakingSpeedRef.current;
       utter.onend = resolve;
       utter.onerror = resolve;
       window.speechSynthesis.speak(utter);
@@ -905,8 +932,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    if ((activeTab === 'translation' || activeTab === 'speaking') && !translationWords.length && practiceDataList.length) {
+    if (activeTab === 'translation' && !translationWords.length && practiceDataList.length) {
       setTranslationWords(pickRandomVocabularyWords(translationWordCount));
+    }
+    if (activeTab === 'speaking' && !translationWords.length && practiceDataList.length) {
+      setTranslationWords(pickAllVocabularyWordsShuffled());
     }
     if (activeTab !== 'speaking') {
       stopRandomPracticeRound();
@@ -2674,35 +2704,11 @@ export default function App() {
                     <span className="source-knob" />
                   </button>
                   <div className="translation-header-controls">
-                    <input
-                      id="speaking-word-count"
-                      type="number"
-                      min={1}
-                      max={50}
-                      step={1}
-                      value={translationWordCount}
-                      aria-label="Number of speaking words"
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === '') return;
-                        const parsed = Number.parseInt(raw, 10);
-                        if (Number.isNaN(parsed)) return;
-                        setTranslationWordCount(Math.max(1, Math.min(50, parsed)));
-                      }}
-                      onBlur={(e) => {
-                        const parsed = Number.parseInt(e.target.value, 10);
-                        const safe = Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(50, parsed));
-                        setTranslationWordCount(safe);
-                      }}
-                    />
+
                     <button
                       type="button"
                       className="ghost-button"
-                      onClick={() => {
-                        stopRandomPracticeRound();
-                        refreshTranslationWords(translationWordCount);
-                      }}
+                      onClick={refreshSpeakingWords}
                     >
                       Random
                     </button>
@@ -2732,6 +2738,18 @@ export default function App() {
                         <span className="speaking-toggle-knob" />
                       </span>
                       <span>Spell</span>
+                    </label>
+                    <label className="speaking-speed-control">
+                      <span>Speed</span>
+                      <input
+                        type="range"
+                        min="0.6"
+                        max="1.5"
+                        step="0.1"
+                        value={speakingSpeed}
+                        onChange={(e) => setSpeakingSpeed(Number(e.target.value))}
+                      />
+                      <strong>{Number(speakingSpeed || 1).toFixed(1)}x</strong>
                     </label>
                   </div>
                 </div>

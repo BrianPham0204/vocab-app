@@ -1501,6 +1501,29 @@ input {
 .speaking-toggle input:checked + .speaking-toggle-track .speaking-toggle-knob {
   transform: translateX(16px);
 }
+
+.speaking-speed-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #315843;
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
+.speaking-speed-control input {
+  width: 96px;
+  min-width: 96px;
+  padding: 0;
+  accent-color: #74bf8b;
+}
+
+.speaking-speed-control strong {
+  min-width: 32px;
+  color: #244432;
+  font-size: 0.82rem;
+}
+
 .options-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
