@@ -371,6 +371,7 @@ export default function App() {
   const [translationWords, setTranslationWords] = useState([]);
   const [speakingWordIndex, setSpeakingWordIndex] = useState(0);
   const [randomSpeakPlaying, setRandomSpeakPlaying] = useState(false);
+  const [speakingWakeLockActive, setSpeakingWakeLockActive] = useState(false);
   const [randomSpeakCurrentWord, setRandomSpeakCurrentWord] = useState('');
   const [speakingSpellEnabled, setSpeakingSpellEnabled] = useLocalStorage('vocab_speaking_spell_enabled', false);
   const [speakingSpellingMap, setSpeakingSpellingMap] = useLocalStorage('vocab_speaking_spelling_map', {});
@@ -437,6 +438,7 @@ export default function App() {
   const speakingSpellEnabledRef = useRef(false);
   const speakingSpellingMapRef = useRef({});
   const speakingSpeedRef = useRef(1);
+  const speakingWakeLockRef = useRef(null);
   
   const reviewSourceData = useMemo(() => {
     const list = Array.isArray(reviewList) ? reviewList : [];
@@ -822,12 +824,42 @@ export default function App() {
       return next;
     });
   };
+  const requestSpeakingWakeLock = async () => {
+    if (typeof navigator === 'undefined' || !navigator.wakeLock?.request || speakingWakeLockRef.current) return;
+    try {
+      const wakeLock = await navigator.wakeLock.request('screen');
+      speakingWakeLockRef.current = wakeLock;
+      setSpeakingWakeLockActive(true);
+      wakeLock.addEventListener('release', () => {
+        if (speakingWakeLockRef.current === wakeLock) {
+          speakingWakeLockRef.current = null;
+        }
+        setSpeakingWakeLockActive(false);
+      });
+    } catch (error) {
+      setSpeakingWakeLockActive(false);
+    }
+  };
+
+  const releaseSpeakingWakeLock = async () => {
+    const wakeLock = speakingWakeLockRef.current;
+    speakingWakeLockRef.current = null;
+    setSpeakingWakeLockActive(false);
+    if (!wakeLock) return;
+    try {
+      await wakeLock.release();
+    } catch (error) {
+      // Wake lock may already be released by the browser.
+    }
+  };
+
   const speakRandomPracticeRound = async () => {
     if (randomSpeakPlaying) return;
     const items = getTranslationSpeakItems();
     if (!items.length) return;
     randomSpeakCancelRef.current = false;
     setRandomSpeakPlaying(true);
+    await requestSpeakingWakeLock();
     try { window.speechSynthesis?.cancel(); } catch (_) {}
 
     const speakAsync = (text, lang, rate = 1) => new Promise((resolve) => {
@@ -882,6 +914,7 @@ export default function App() {
       }
     } finally {
       setRandomSpeakPlaying(false);
+      releaseSpeakingWakeLock();
     }
   };
 
@@ -889,8 +922,25 @@ export default function App() {
     randomSpeakCancelRef.current = true;
     setRandomSpeakPlaying(false);
     setRandomSpeakCurrentWord('');
+    releaseSpeakingWakeLock();
     try { window.speechSynthesis?.cancel(); } catch (_) {}
   };
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && randomSpeakPlaying) {
+        requestSpeakingWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [randomSpeakPlaying]);
+
+  useEffect(() => () => {
+    releaseSpeakingWakeLock();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const moveSpeakingWord = (direction) => {
     const total = (translationWords || []).length;
@@ -2781,6 +2831,9 @@ export default function App() {
                       />
                       <strong>{Number(speakingSpeed || 1).toFixed(1)}x</strong>
                     </label>
+                    {speakingWakeLockActive ? (
+                      <span className="speaking-awake-status">Awake</span>
+                    ) : null}
                   </div>
                 </div>
               )}

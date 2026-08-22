@@ -1555,6 +1555,16 @@ input {
   font-size: 0.82rem;
 }
 
+.speaking-awake-status {
+  border: 1px solid #c7e2cf;
+  background: #edf8f1;
+  color: #315843;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
 .options-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
