@@ -370,6 +370,7 @@ export default function App() {
   const [translationWordCount, setTranslationWordCount] = useState(5);
   const [translationWords, setTranslationWords] = useState([]);
   const [randomSpeakPlaying, setRandomSpeakPlaying] = useState(false);
+  const [randomSpeakCurrentWord, setRandomSpeakCurrentWord] = useState('');
   const [speakingSpellEnabled, setSpeakingSpellEnabled] = useLocalStorage('vocab_speaking_spell_enabled', false);
   const [storySource, setStorySource] = useState('all');
   const [storyWordCount, setStoryWordCount] = useState(8);
@@ -764,8 +765,9 @@ export default function App() {
     String(word || '')
       .trim()
       .split('')
-      .filter((char) => /[a-z]/i.test(char))
-      .join(', ')
+      .map((char) => (char.trim() ? char : 'space'))
+      .filter((char) => /[a-z]/i.test(char) || char === 'space')
+      .join(' ')
   );
   const speakRandomPracticeRound = async () => {
     if (randomSpeakPlaying) return;
@@ -791,6 +793,7 @@ export default function App() {
       while (!randomSpeakCancelRef.current) {
         for (const item of items) {
           if (randomSpeakCancelRef.current) break;
+          setRandomSpeakCurrentWord(item.vocabulary);
           await speakAsync(item.vocabulary, 'en-US');
           if (randomSpeakCancelRef.current) break;
           await waitForRandomSpeak(1500);
@@ -817,6 +820,7 @@ export default function App() {
   const stopRandomPracticeRound = () => {
     randomSpeakCancelRef.current = true;
     setRandomSpeakPlaying(false);
+    setRandomSpeakCurrentWord('');
     try { window.speechSynthesis?.cancel(); } catch (_) {}
   };
   const pickRandomStoryItems = (requestedCount = storyWordCount) => {
@@ -2075,6 +2079,52 @@ export default function App() {
   const findDetailByVocabulary = (word) => {
     return getVocabularyPracticeItem(word);
   };
+  const speakingFocusWord = randomSpeakCurrentWord || hoveredOption || translationWords[0] || '';
+  const speakingFocusDetail = findDetailByVocabulary(speakingFocusWord);
+  const renderSpeakingDetailCard = () => {
+    const detail = speakingFocusDetail;
+    if (!detail) {
+      return (
+        <div className="speaking-detail-card empty">
+          <span className="info-label">Speaking detail</span>
+          <strong>No word selected</strong>
+          <p>Hover a speaking card or press Play to show the current word detail here.</p>
+        </div>
+      );
+    }
+
+    const word = String(detail?.vocabulary || speakingFocusWord || '').trim();
+    const type = String(detail?.type || '').replace(/^\((.*)\)$/, '$1').trim();
+    const spelling = buildSpellingText(word);
+    return (
+      <div className="speaking-detail-card">
+        <div className="speaking-detail-top">
+          <div>
+            <span className="info-label">Speaking detail</span>
+            <h3>{word || '—'}</h3>
+          </div>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => word && speak(word, 'en-US')}
+            title="Speak word"
+          >
+            Speak
+          </button>
+        </div>
+        <div className="speaking-detail-grid">
+          <p><strong>Type</strong><span>{type || '—'}</span></p>
+          <p><strong>Pronunciation</strong><span>{detail?.pronun || '—'}</span></p>
+          <p><strong>Meaning</strong><span>{detail?.vietnamMeaning || '—'}</span></p>
+          <p><strong>Spelling</strong><span>{spelling || '—'}</span></p>
+        </div>
+        <div className="speaking-detail-example">
+          <strong>Example</strong>
+          <p>{detail?.sentences?.en || '—'}</p>
+        </div>
+      </div>
+    );
+  };
   const mobilePromptContent = useMemo(() => {
     if (!currentQuestion) return { primary: '', secondary: '' };
 
@@ -2767,15 +2817,7 @@ export default function App() {
               </div>
             ) : activeTab === 'speaking' ? (
               <div className="speaking-panel">
-                <div className="speaking-status">
-                  <span className="info-label">Speaking round</span>
-                  <strong>{randomSpeakPlaying ? 'Playing' : `${(translationWords || []).length} words ready`}</strong>
-                  <p>
-                    {speakingSpellEnabled
-                      ? 'word - 1.5s - word - 1.5s - spelling - 1.5s - Vietnamese meaning'
-                      : 'word - 1.5s - word - 1.5s - Vietnamese meaning'}
-                  </p>
-                </div>
+                {renderSpeakingDetailCard()}
                 <div className="data-structure translation-words-box">
                   <span className="info-label">Words</span>
                   {(translationWords || []).length ? (
@@ -2786,7 +2828,7 @@ export default function App() {
                           <button
                             key={word}
                             type="button"
-                            className="speaking-word-card"
+                            className={`speaking-word-card ${normalizeText(randomSpeakCurrentWord) === normalizeText(word) ? 'is-current' : ''}`}
                             onMouseEnter={() => setHoveredOption(word)}
                             onFocus={() => setHoveredOption(word)}
                             onTouchStart={() => setHoveredOption(word)}

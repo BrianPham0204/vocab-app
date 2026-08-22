@@ -1269,23 +1269,75 @@ input {
   gap: 14px;
 }
 
-.speaking-status {
+.speaking-detail-card {
   display: grid;
-  gap: 6px;
+  gap: 14px;
   padding: 16px;
+  border: 1px solid #cfe6d6;
+  background: linear-gradient(180deg, #ffffff 0%, #f2fbf5 100%);
+  border-radius: 8px;
+  box-shadow: 0 14px 28px rgba(54, 104, 70, 0.08);
+}
+
+.speaking-detail-card.empty p {
+  margin: 0;
+  color: #5b7c68;
+}
+
+.speaking-detail-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.speaking-detail-top h3 {
+  margin: 4px 0 0;
+  color: #173327;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.speaking-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.speaking-detail-grid p {
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
   border: 1px solid #d8ebdd;
-  background: linear-gradient(180deg, #fbfefb 0%, #f1faf4 100%);
+  background: rgba(255, 255, 255, 0.72);
   border-radius: 8px;
 }
 
-.speaking-status strong {
-  color: #244432;
+.speaking-detail-grid strong,
+.speaking-detail-example strong {
+  color: #315843;
+  font-size: 0.72rem;
+  text-transform: uppercase;
 }
 
-.speaking-status p {
+.speaking-detail-grid span {
+  color: #244432;
+  overflow-wrap: anywhere;
+}
+
+.speaking-detail-example {
+  display: grid;
+  gap: 5px;
+  padding-top: 2px;
+}
+
+.speaking-detail-example p {
   margin: 0;
-  color: #5b7c68;
-  font-size: 0.92rem;
+  color: #4d6e5a;
+  line-height: 1.45;
 }
 
 .speaking-word-list {
@@ -1314,6 +1366,12 @@ input {
   border-color: #9accab;
   outline: none;
   transform: translateY(-1px);
+}
+
+.speaking-word-card.is-current {
+  border-color: #69b982;
+  background: #edf9f1;
+  box-shadow: 0 0 0 3px rgba(105, 185, 130, 0.16), 0 10px 20px rgba(54, 104, 70, 0.07);
 }
 
 .speaking-word-main {
@@ -1868,6 +1926,10 @@ input {
   .translation-header-controls {
     margin-left: 0;
     justify-content: flex-start;
+  }
+
+  .speaking-detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .writing-source-stack {
