@@ -1582,33 +1582,32 @@ input {
   font-size: 0.82rem;
 }
 
-.speaking-previous-word {
-  max-width: 180px;
+.speaking-previous-row {
+  width: 100%;
   min-width: 0;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   border: 1px solid #d8ebdd;
   background: #f7fcf8;
   color: #315843;
-  border-radius: 999px;
-  padding: 5px 9px;
+  border-radius: 8px;
+  padding: 7px 10px;
   font-size: 0.76rem;
   font-weight: 800;
 }
 
-.speaking-previous-word span {
+.speaking-previous-row span {
+  flex: 0 0 auto;
   color: #6a8172;
   font-size: 0.7rem;
   text-transform: uppercase;
 }
 
-.speaking-previous-word strong {
+.speaking-previous-row strong {
   min-width: 0;
   color: #244432;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .speaking-awake-status {

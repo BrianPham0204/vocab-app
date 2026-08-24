@@ -2854,16 +2854,16 @@ export default function App() {
                       />
                       <strong>{Number(speakingSpeed || 1).toFixed(1)}x</strong>
                     </label>
-                    {speakingPreviousWord ? (
-                      <span className="speaking-previous-word">
-                        <span>Prev</span>
-                        <strong>{speakingPreviousWord}</strong>
-                      </span>
-                    ) : null}
                     {speakingWakeLockActive ? (
                       <span className="speaking-awake-status">Awake</span>
                     ) : null}
                   </div>
+                  {speakingPreviousWord ? (
+                    <div className="speaking-previous-row">
+                      <span>Prev</span>
+                      <strong>{speakingPreviousWord}</strong>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
