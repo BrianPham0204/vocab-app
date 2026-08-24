@@ -1366,6 +1366,13 @@ export default function App() {
       return values.includes(normalized);
     }) || null;
   };
+
+  const findSearchVocabularyMeta = (text) => {
+    const exact = findLocalVocabularyMeta(text);
+    if (exact) return exact;
+    if (selectedSearchItem?.type) return selectedSearchItem;
+    return searchResults.find(({ item }) => String(item?.type || '').trim())?.item || searchResults[0]?.item || null;
+  };
   const updateWordRangeField = (field, value) => {
     const digitsOnly = String(value || '').replace(/[^\d]/g, '');
     setWordRange((prev) => ({ ...(prev || {}), [field]: digitsOnly }));
@@ -2336,7 +2343,7 @@ export default function App() {
     || currentQuestion?.answer
     || ''
   ).trim();
-  const searchFallbackWordMeta = findLocalVocabularyMeta(searchQuery);
+  const searchFallbackWordMeta = findSearchVocabularyMeta(searchQuery);
   const searchFallbackWordType = (() => {
     const rawType = String(searchFallbackWordMeta?.type || '').trim();
     const cleanedType = rawType.replace(/^\((.*)\)$/, '$1').trim();
