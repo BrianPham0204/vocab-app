@@ -994,11 +994,38 @@ input {
   word-break: break-word;
 }
 
+.search-fallback-type {
+  justify-self: start;
+  border: 1px solid #c7e2cf;
+  background: #edf8f1;
+  color: #315843;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
 .search-fallback-card p {
   margin: 0;
   color: #3f5d4c;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.search-fallback-example {
+  display: grid;
+  gap: 3px;
+  padding-top: 4px;
+}
+
+.search-fallback-example strong {
+  color: #315843;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.search-fallback-example span {
+  color: #4d6e5a;
 }
 
 .search-fallback-card small {

@@ -2327,6 +2327,20 @@ export default function App() {
     || currentQuestion?.answer
     || ''
   ).trim();
+  const searchFallbackWordMeta = findLocalVocabularyMeta(searchQuery);
+  const searchFallbackWordType = (() => {
+    const rawType = String(searchFallbackWordMeta?.type || '').trim();
+    const cleanedType = rawType.replace(/^\((.*)\)$/, '$1').trim();
+    if (cleanedType) return cleanedType;
+    const trimmedQuery = String(searchQuery || '').trim();
+    return trimmedQuery.includes(' ') ? 'phrase' : '';
+  })();
+  const searchFallbackExample = String(
+    searchFallbackWordMeta?.sentences?.en
+    || searchFallbackWordMeta?.sentences_en
+    || searchFallbackWordMeta?.learn
+    || ''
+  ).trim();
   const renderSearchSummary = (item) => {
     const word = formatWordWithType(item?.vocabulary || item?.vietnamMeaning || '', item);
     const synonym = String(item?.synonym || '').trim();
@@ -2913,6 +2927,9 @@ export default function App() {
                     <div className="search-fallback-card">
                       <span className="info-label">Google Translate</span>
                       <strong>{searchFallback.query || searchQuery.trim()}</strong>
+                      {searchFallbackWordType ? (
+                        <span className="search-fallback-type">{searchFallbackWordType}</span>
+                      ) : null}
                       {searchFallback.loading ? (
                         <p>Dang goi Google Translate...</p>
                       ) : searchFallback.error ? (
@@ -2920,6 +2937,12 @@ export default function App() {
                       ) : searchFallback.translatedText ? (
                         <>
                           <p>{searchFallback.translatedText}</p>
+                          {searchFallbackExample ? (
+                            <p className="search-fallback-example">
+                              <strong>Example</strong>
+                              <span>{searchFallbackExample}</span>
+                            </p>
+                          ) : null}
                           <small>External translation</small>
                         </>
                       ) : (
