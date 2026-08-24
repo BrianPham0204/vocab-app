@@ -627,7 +627,7 @@ export default function App() {
   }, [activeTab, searchResults, selectedSearchItem]);
 
   useEffect(() => {
-    if (activeTab !== 'search' || !normalizedSearchQuery || searchResults.length > 0) {
+    if (activeTab !== 'search' || !normalizedSearchQuery) {
       if (searchTranslateAbortRef.current) {
         searchTranslateAbortRef.current.abort();
         searchTranslateAbortRef.current = null;
@@ -716,7 +716,7 @@ export default function App() {
         searchTranslateAbortRef.current = null;
       }
     };
-  }, [activeTab, normalizedSearchQuery, searchQuery, searchResults.length, translateConfig]);
+  }, [activeTab, normalizedSearchQuery, searchQuery, translateConfig]);
 
   useEffect(() => {
     if (!isPracticeTab || practiceSource !== 'review' || reviewSourceData.length > 0) {
@@ -2909,7 +2909,24 @@ export default function App() {
 
                 <div className="search-results-pane">
                   {searchTerms.length ? (
-                    searchResults.length ? (
+                    <>
+                    <div className="search-fallback-card">
+                      <span className="info-label">Google Translate</span>
+                      <strong>{searchFallback.query || searchQuery.trim()}</strong>
+                      {searchFallback.loading ? (
+                        <p>Dang goi Google Translate...</p>
+                      ) : searchFallback.error ? (
+                        <p className="search-fallback-error">{searchFallback.error}</p>
+                      ) : searchFallback.translatedText ? (
+                        <>
+                          <p>{searchFallback.translatedText}</p>
+                          <small>External translation</small>
+                        </>
+                      ) : (
+                        <p>Translation result will appear here.</p>
+                      )}
+                    </div>
+                    {searchResults.length ? (
                       <div className="search-results-list">
                         {searchResults.map(({ item, index }) => {
                           const isSelected = selectedSearchItem === item;
@@ -2940,23 +2957,11 @@ export default function App() {
                         })}
                       </div>
                     ) : (
-                      <div className="search-fallback-card">
-                        <span className="info-label">No local match</span>
-                        <strong>{searchFallback.query || searchQuery.trim()}</strong>
-                        {searchFallback.loading ? (
-                          <p>Dang goi Google Translate...</p>
-                        ) : searchFallback.error ? (
-                          <p className="search-fallback-error">{searchFallback.error}</p>
-                        ) : searchFallback.translatedText ? (
-                          <>
-                            <p>{searchFallback.translatedText}</p>
-                            <small>Fallback translation</small>
-                          </>
-                        ) : (
-                          <p>No matching rows.</p>
-                        )}
+                      <div className="data-structure">
+                        <p style={{ margin: 0 }}>No matching rows in vocabulary storage.</p>
                       </div>
-                    )
+                    )}
+                    </>
                   ) : (
                     <div className="data-structure">
                       <p style={{ margin: 0 }}>Type to search across your vocabulary data.</p>
