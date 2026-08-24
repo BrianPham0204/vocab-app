@@ -373,6 +373,7 @@ export default function App() {
   const [randomSpeakPlaying, setRandomSpeakPlaying] = useState(false);
   const [speakingWakeLockActive, setSpeakingWakeLockActive] = useState(false);
   const [randomSpeakCurrentWord, setRandomSpeakCurrentWord] = useState('');
+  const [speakingPreviousWord, setSpeakingPreviousWord] = useState('');
   const [speakingSpellEnabled, setSpeakingSpellEnabled] = useLocalStorage('vocab_speaking_spell_enabled', false);
   const [speakingSpellingMap, setSpeakingSpellingMap] = useLocalStorage('vocab_speaking_spelling_map', {});
   const [speakingSpeed, setSpeakingSpeed] = useLocalStorage('vocab_speaking_speed', 1);
@@ -774,6 +775,7 @@ export default function App() {
     stopRandomPracticeRound();
     setTranslationWords(pickAllVocabularyWordsShuffled());
     setSpeakingWordIndex(0);
+    setSpeakingPreviousWord('');
   };
 
   const getVocabularyPracticeItem = (word) => {
@@ -890,6 +892,11 @@ export default function App() {
       while (!randomSpeakCancelRef.current) {
         for (const [itemIndex, item] of items.entries()) {
           if (randomSpeakCancelRef.current) break;
+          if (itemIndex > 0) {
+            setSpeakingPreviousWord(items[itemIndex - 1]?.vocabulary || '');
+          } else {
+            setSpeakingPreviousWord('');
+          }
           setSpeakingWordIndex(itemIndex);
           setRandomSpeakCurrentWord(item.vocabulary);
           await speakAsync(item.vocabulary, 'en-US');
@@ -949,7 +956,9 @@ export default function App() {
     setHoveredOption(null);
     setSpeakingWordIndex((prev) => {
       const current = Math.min(Math.max(Number(prev) || 0, 0), total - 1);
-      return Math.min(Math.max(current + direction, 0), total - 1);
+      const next = Math.min(Math.max(current + direction, 0), total - 1);
+      setSpeakingPreviousWord(next > 0 ? translationWords[next - 1] || '' : '');
+      return next;
     });
   };
   const pickRandomStoryItems = (requestedCount = storyWordCount) => {
@@ -2845,6 +2854,12 @@ export default function App() {
                       />
                       <strong>{Number(speakingSpeed || 1).toFixed(1)}x</strong>
                     </label>
+                    {speakingPreviousWord ? (
+                      <span className="speaking-previous-word">
+                        <span>Prev</span>
+                        <strong>{speakingPreviousWord}</strong>
+                      </span>
+                    ) : null}
                     {speakingWakeLockActive ? (
                       <span className="speaking-awake-status">Awake</span>
                     ) : null}
