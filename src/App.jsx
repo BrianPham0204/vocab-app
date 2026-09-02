@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { vocabularyData as localVocabularyData } from './data/mockData';
 import './App.css';
 import { convertSheetUrlToCsv, fetchCsvAsText, parseCSV, mapSheetRowsToData } from './utils/sheet';
@@ -9,6 +9,7 @@ import { requestTranslation } from './utils/translate';
 import { requestTtsAudio } from './utils/tts';
 
 const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1mVSZiur6rR9fBnMRPqLDSqrifFKgGEIYw-Rza_UZELc/edit?gid=1142593962#gid=1142593962';
+const WRITING_LOG_ENDPOINT = import.meta.env.VITE_WRITING_LOG_API_URL || '/api/writing-log';
 
 const groupedTabs = [
   { id: 'mcq', label: 'Multiple Choice' },
@@ -41,7 +42,12 @@ const storyFormats = [
 const OR_MODELS = [
   'meta-llama/llama-3.3-70b-instruct:free',
   'google/gemma-4-31b-it:free',
-  'openai/gpt-oss-120b:free'
+  'openai/gpt-oss-120b:free',
+  'qwen/qwen3-8b:free',
+  'mistralai/mistral-7b-instruct:free',
+  'meta-llama/llama-3.1-8b-instruct:free',
+  'google/gemma-2-9b-it:free',
+  'deepseek/deepseek-r1-0528-qwen3-8b:free',
 ];
 const SEARCH_FIELD_ALL = 'all';
 const SEARCH_MATCH_CONTAINS = 'contains';
@@ -366,14 +372,15 @@ export default function App() {
     y: 0
   });
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [writingLogSaving, setWritingLogSaving] = useState(false);
   const [sourceSlapActive, setSourceSlapActive] = useState(false);
   const [translationWordCount, setTranslationWordCount] = useState(5);
   const [translationWords, setTranslationWords] = useState([]);
   const [speakingWordIndex, setSpeakingWordIndex] = useState(0);
   const [randomSpeakPlaying, setRandomSpeakPlaying] = useState(false);
-  const [speakingWakeLockActive, setSpeakingWakeLockActive] = useState(false);
   const [randomSpeakCurrentWord, setRandomSpeakCurrentWord] = useState('');
   const [speakingPreviousWord, setSpeakingPreviousWord] = useState('');
+  const [speakingWakeLockActive, setSpeakingWakeLockActive] = useState(false);
   const [speakingSpellEnabled, setSpeakingSpellEnabled] = useLocalStorage('vocab_speaking_spell_enabled', false);
   const [speakingSpellingMap, setSpeakingSpellingMap] = useLocalStorage('vocab_speaking_spelling_map', {});
   const [speakingSpeed, setSpeakingSpeed] = useLocalStorage('vocab_speaking_speed', 1);
@@ -383,6 +390,10 @@ export default function App() {
   const [storyContext, setStoryContext] = useState('');
   const [storyItems, setStoryItems] = useState([]);
   const [storyText, setStoryText] = useState('');
+  const [storySentences, setStorySentences] = useState([]);
+  const [storyLoading, setStoryLoading] = useState(false);
+  const [storyError, setStoryError] = useState('');
+  const [playingIdx, setPlayingIdx] = useState(-1);
   const [pendingReviewRemoval, setPendingReviewRemoval] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFields, setSearchFields] = useState([SEARCH_FIELD_ALL]);
@@ -435,6 +446,9 @@ export default function App() {
   const writeWordInputRef = useRef(null);
   const shouldRefocusWriteWordRef = useRef(false);
   const shouldAutoSpeakNextRef = useRef(false);
+  const storyAudioRef = useRef(null);
+  const storyPlayCancelRef = useRef(false);
+  const storyItemsRef = useRef([]);
   const randomSpeakCancelRef = useRef(false);
   const speakingSpellEnabledRef = useRef(false);
   const speakingSpellingMapRef = useRef({});
@@ -731,7 +745,7 @@ export default function App() {
     updateTabState(activeTab, (activeTab === 'write-word' || activeTab === 'translation')
       ? { index: 0, input: '', checked: false, feedback: '' }
       : { index: 0, selected: '', checked: false, feedback: '' });
-    if (activeTab === 'translation' || activeTab === 'speaking') {
+    if (activeTab === 'translation') {
       setTranslationWords([]);
     }
   }, [activeTab, isPracticeTab, practiceSource, reviewSourceData.length]);
@@ -751,7 +765,6 @@ export default function App() {
     return shuffled.slice(0, safeCount);
   };
 
-
   const pickAllVocabularyWordsShuffled = () => {
     const pool = practiceDataList
       .map((it) => String(it?.vocabulary || '').trim())
@@ -770,6 +783,29 @@ export default function App() {
     updateTabState('translation', { input: '', checked: false, feedback: '' });
   };
 
+  const saveWritingLogToSheet = async (entry) => {
+    const response = await fetch(WRITING_LOG_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        words: entry.words,
+        answer: entry.content
+      })
+    });
+    const responseText = await response.text();
+    let payload = {};
+    try {
+      payload = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      payload = {};
+    }
+    if (!response.ok) {
+      throw new Error(payload?.error || responseText || `Could not save to Google Sheet (${response.status}).`);
+    }
+    return payload;
+  };
 
   const refreshSpeakingWords = () => {
     stopRandomPracticeRound();
@@ -806,6 +842,7 @@ export default function App() {
       .filter((char) => /[a-z0-9\s]/i.test(char))
       .join(' ')
   );
+
   const getSpellingTextForWord = (word, sourceMap = speakingSpellingMap) => {
     const key = normalizeText(word);
     const custom = String(sourceMap?.[key] || '').trim();
@@ -826,6 +863,7 @@ export default function App() {
       return next;
     });
   };
+
   const requestSpeakingWakeLock = async () => {
     if (typeof navigator === 'undefined' || !navigator.wakeLock?.request || speakingWakeLockRef.current) return;
     try {
@@ -876,6 +914,7 @@ export default function App() {
       utter.onerror = resolve;
       window.speechSynthesis.speak(utter);
     });
+
     const speakSpellingAsync = async (text) => {
       const chars = Array.from(String(text || ''));
       for (const char of chars) {
@@ -961,6 +1000,7 @@ export default function App() {
       return next;
     });
   };
+
   const pickRandomStoryItems = (requestedCount = storyWordCount) => {
     const pool = storyDataList.filter((item) => String(item?.vocabulary || '').trim());
     const unique = [];
@@ -984,26 +1024,106 @@ export default function App() {
   const refreshStoryWords = (requestedCount = storyWordCount) => {
     const nextItems = pickRandomStoryItems(requestedCount);
     setStoryItems(nextItems);
+    setStorySentences([]);
+    setStoryError('');
+    setPlayingIdx(-1);
+    storyPlayCancelRef.current = true;
     setStoryText(buildLocalStoryDraft({ items: nextItems, format: storyFormat, context: storyContext }));
   };
 
-  const handleGenerateStoryDraft = () => {
+  const playStory = useCallback(async (startIdx = 0) => {
+    if (!storySentences.length) return;
+    storyPlayCancelRef.current = false;
+    for (let i = startIdx; i < storySentences.length; i++) {
+      if (storyPlayCancelRef.current) break;
+      setPlayingIdx(i);
+      await new Promise((resolve) => {
+        const audio = new Audio(storySentences[i].audioUrl);
+        storyAudioRef.current = audio;
+        audio.onended = resolve;
+        audio.onerror = resolve;
+        audio.play().catch(resolve);
+      });
+    }
+    setPlayingIdx(-1);
+
+    // Vocab recap — only when playing from beginning and not stopped
+    if (storyPlayCancelRef.current || startIdx !== 0) return;
+    const items = storyItemsRef.current;
+    if (!items.length) return;
+
+    const speakAsync = (text, lang) => new Promise((resolve) => {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = lang || 'en-US';
+      utter.onend = resolve;
+      utter.onerror = resolve;
+      window.speechSynthesis.speak(utter);
+    });
+
+    await speakAsync('Vocabulary recap.', 'en-US');
+    for (const item of items) {
+      if (storyPlayCancelRef.current) break;
+      const word = String(item?.vocabulary || '').trim();
+      const meaning = String(item?.vietnamMeaning || '').trim();
+      if (word) await speakAsync(word, 'en-US');
+      if (meaning && !storyPlayCancelRef.current) await speakAsync(meaning, 'vi-VN');
+    }
+  }, [storySentences]);
+
+  const handleGenerateStoryDraft = async () => {
     const items = storyItems.length ? storyItems : pickRandomStoryItems(storyWordCount);
     setStoryItems(items);
-    setStoryText(buildLocalStoryDraft({ items, format: storyFormat, context: storyContext }));
+    setStorySentences([]);
+    setStoryError('');
+    setPlayingIdx(-1);
+    storyPlayCancelRef.current = true;
+    if (storyAudioRef.current) { storyAudioRef.current.pause(); storyAudioRef.current = null; }
+
+    const words = items.map(item => String(item?.vocabulary || '').trim()).filter(Boolean);
+    if (!words.length) return;
+
+    setStoryLoading(true);
+    try {
+      const isLocal = typeof window !== 'undefined' &&
+        ['localhost', '127.0.0.1'].includes(window.location.hostname);
+      const endpoint = isLocal
+        ? 'http://127.0.0.1:4321/api/create-story'
+        : '/api/create-story';
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ words, format: storyFormat, context: storyContext }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Story API ${res.status}`);
+      }
+      const data = await res.json();
+      setStorySentences(data.sentences || []);
+      setStoryText((data.sentences || []).map(s => s.text).join(' '));
+    } catch (e) {
+      setStoryError(e.message);
+      setStoryText(buildLocalStoryDraft({ items, format: storyFormat, context: storyContext }));
+    } finally {
+      setStoryLoading(false);
+    }
   };
 
   const handleReadStory = () => {
+    if (storySentences.length) { playStory(0); return; }
     if (!storyText.trim()) return;
     speak(storyText, 'en-US');
   };
 
   const handleStopStory = () => {
-    try {
-      window.speechSynthesis?.cancel();
-    } catch (error) {
-      // ignore if not supported
+    storyPlayCancelRef.current = true;
+    if (storyAudioRef.current) {
+      storyAudioRef.current.pause();
+      storyAudioRef.current.currentTime = 0;
     }
+    setPlayingIdx(-1);
+    try { window.speechSynthesis?.cancel(); } catch (_) {}
   };
 
   useEffect(() => {
@@ -1026,6 +1146,10 @@ export default function App() {
       return Math.min(Math.max(Number(prev) || 0, 0), total - 1);
     });
   }, [translationWords.length]);
+
+  useEffect(() => {
+    storyItemsRef.current = storyItems;
+  }, [storyItems]);
 
   useEffect(() => {
     if (activeTab === 'story' && !storyItems.length && storyDataList.length) {
@@ -1137,7 +1261,6 @@ export default function App() {
       }
     };
 
-    // auto-preview when sheetUrl changes
     fetchSheetPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheetUrl]);
@@ -1373,6 +1496,7 @@ export default function App() {
     if (selectedSearchItem?.type) return selectedSearchItem;
     return searchResults.find(({ item }) => String(item?.type || '').trim())?.item || searchResults[0]?.item || null;
   };
+
   const updateWordRangeField = (field, value) => {
     const digitsOnly = String(value || '').replace(/[^\d]/g, '');
     setWordRange((prev) => ({ ...(prev || {}), [field]: digitsOnly }));
@@ -1713,7 +1837,7 @@ export default function App() {
     return uniq.map((s) => normalizeText(s));
   };
 
-  const handleCheck = () => {
+  const handleCheck = async () => {
     if (!(activeTab === 'translation' || activeTab === 'write-word')) return;
     const input = currentTabState.input || '';
     const normalizedInput = normalizeText(input);
@@ -1721,6 +1845,7 @@ export default function App() {
     const shouldRemoveWhenCorrectInReview = isPracticeTab && practiceSource === 'review';
 
     if (activeTab === 'translation') {
+      if (writingLogSaving) return;
       const trimmed = String(input || '').trim();
       if (!trimmed) {
         updateTabState('translation', {
@@ -1737,14 +1862,33 @@ export default function App() {
         words,
         content: trimmed
       };
-      setWritingLogList((prev) => [entry, ...(Array.isArray(prev) ? prev : [])]);
+      setWritingLogSaving(true);
       updateTabState('translation', {
-        input: '',
         checked: true,
-        feedback: 'Đã lưu vào Writing Log.',
-        lastResultCorrect: true
+        feedback: 'Đang lưu vào Google Sheet...',
+        lastResultCorrect: null
       });
-      refreshTranslationWords(translationWordCount);
+      try {
+        await saveWritingLogToSheet(entry);
+        setWritingLogList((prev) => [{ ...entry, sheetSaved: true }, ...(Array.isArray(prev) ? prev : [])]);
+        refreshTranslationWords(translationWordCount);
+        updateTabState('translation', {
+          input: '',
+          checked: true,
+          feedback: 'Đã lưu vào Google Sheet (cột A:B).',
+          lastResultCorrect: true
+        });
+      } catch (error) {
+        console.error('Failed to save writing log to Google Sheet:', error);
+        setWritingLogList((prev) => [{ ...entry, sheetSaved: false, sheetError: String(error?.message || error) }, ...(Array.isArray(prev) ? prev : [])]);
+        updateTabState('translation', {
+          checked: true,
+          feedback: `Đã lưu local, nhưng chưa lưu được Google Sheet: ${error?.message || 'Unknown error'}`,
+          lastResultCorrect: false
+        });
+      } finally {
+        setWritingLogSaving(false);
+      }
       return;
     }
  
@@ -2095,7 +2239,7 @@ export default function App() {
     setDisabledMap((prev) => ({ ...(prev || {}), [activeTab]: {} }));
     if (!isPracticeTab) return;
 
-    if (activeTab === 'translation') {
+    if (activeTab === 'translation' || activeTab === 'speaking') {
       setTranslationWords([]);
       updateTabState(activeTab, { input: '', checked: false, feedback: '', lastResultCorrect: null });
       return;
@@ -2814,7 +2958,6 @@ export default function App() {
                     <span className="source-knob" />
                   </button>
                   <div className="translation-header-controls">
-
                     <button
                       type="button"
                       className="ghost-button"
@@ -2884,7 +3027,7 @@ export default function App() {
                       type="search"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search vocabulary, synonym, meaning, example..."
+                      placeholder="Search English or Vietnamese..."
                       autoComplete="off"
                     />
                   </label>
@@ -3020,6 +3163,7 @@ export default function App() {
                 <div className="data-structure translation-words-box">
                   <span className="info-label">Words navigation</span>
                   {(translationWords || []).length ? (
+                    <>
                     <div className="speaking-word-navigator">
                       <button
                         type="button"
@@ -3042,8 +3186,34 @@ export default function App() {
                         Next
                       </button>
                     </div>
+                    <div className="speaking-word-list" hidden>
+                      {translationWords.map((word) => {
+                        const detail = findDetailByVocabulary(word);
+                        return (
+                          <button
+                            key={word}
+                            type="button"
+                            className={`speaking-word-card ${normalizeText(randomSpeakCurrentWord) === normalizeText(word) ? 'is-current' : ''}`}
+                            onMouseEnter={() => setHoveredOption(word)}
+                            onFocus={() => setHoveredOption(word)}
+                            onTouchStart={() => setHoveredOption(word)}
+                          >
+                            <div className="speaking-word-main">
+                              <strong>{word || '—'}</strong>
+                              {detail?.type ? <span className="speaking-type">{String(detail.type).replace(/^\((.*)\)$/, '$1')}</span> : null}
+                            </div>
+                            {detail?.pronun ? <span className="speaking-pronun">{detail.pronun}</span> : null}
+                            <span className="speaking-meaning">{detail?.vietnamMeaning || '—'}</span>
+                            {speakingSpellEnabled ? (
+                              <small className="speaking-spelling">{getSpellingTextForWord(word) || '—'}</small>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    </>
                   ) : (
-                    <p>-</p>
+                    <p>—</p>
                   )}
                 </div>
               </div>
@@ -3080,14 +3250,41 @@ export default function App() {
                 <div className="story-layout">
                   <section className="story-player">
                     <div className="story-player-header">
-                      <span className="info-label">Draft story</span>
+                      <span className="info-label">
+                        {storyLoading ? 'Generating…' : storySentences.length ? `${storySentences.length} sentences` : 'Draft story'}
+                      </span>
                       <div className="story-player-actions">
-                        <button type="button" className="ghost-button" onClick={handleReadStory} disabled={!storyText.trim()}>Play</button>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={handleReadStory}
+                          disabled={storyLoading || (!storySentences.length && !storyText.trim())}
+                        >
+                          {playingIdx >= 0 ? `▶ ${playingIdx + 1}/${storySentences.length}` : 'Play'}
+                        </button>
                         <button type="button" className="secondary-button" onClick={handleStopStory}>Stop</button>
                       </div>
                     </div>
                     <div className="story-text">
-                      {storyText ? storyText : 'Generate a story from your vocabulary list.'}
+                      {storyLoading ? (
+                        <span className="story-generating">Generating story with AI…</span>
+                      ) : storyError ? (
+                        <span className="story-error">{storyError}</span>
+                      ) : storySentences.length ? (
+                        storySentences.map((s, i) => (
+                          <span
+                            key={i}
+                            className={`story-sentence${i === playingIdx ? ' is-playing' : ''}`}
+                            onClick={() => { storyPlayCancelRef.current = false; playStory(i); }}
+                          >
+                            {s.text}{' '}
+                          </span>
+                        ))
+                      ) : storyText ? (
+                        storyText
+                      ) : (
+                        'Generate a story from your vocabulary list.'
+                      )}
                     </div>
                   </section>
 
@@ -3404,7 +3601,7 @@ export default function App() {
                     className={`feedback-box ${currentTabState.feedback ? 'show' : ''} ${activeTab === 'write-word'
                       ? `write-word-feedback ${currentTabState.feedback ? (currentTabState.lastResultCorrect ? 'success' : 'error') : ''}`
                       : currentTabState.feedback
-                        ? (/^chính xác/i.test(currentTabState.feedback) ? 'success' : 'error')
+                        ? ((currentTabState.lastResultCorrect || /^chính xác/i.test(currentTabState.feedback)) ? 'success' : 'error')
                         : ''} ${isMcqTab ? 'mcq-feedback' : ''}`}
                     aria-live="polite"
                   >
@@ -3434,7 +3631,9 @@ export default function App() {
                     </div>
                   )}
                   {activeTab === 'translation' ? (
-                    <button className="primary-button" onClick={handleCheck}>Confirm</button>
+                    <button className="primary-button" onClick={handleCheck} disabled={writingLogSaving}>
+                      {writingLogSaving ? 'Saving...' : 'Confirm'}
+                    </button>
                   ) : activeTab === 'write-word' ? (
                     <button
                       className="ghost-button"

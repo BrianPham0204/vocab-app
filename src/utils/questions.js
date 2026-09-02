@@ -3,6 +3,7 @@ export function normalizeText(text) {
   return String(text || '')
     .toLowerCase()
     .normalize('NFD')
+    .replace(/[đĐ]/g, 'd')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
