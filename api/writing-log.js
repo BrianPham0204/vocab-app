@@ -4,6 +4,13 @@ const DEFAULT_SPREADSHEET_ID = '1mVSZiur6rR9fBnMRPqLDSqrifFKgGEIYw-Rza_UZELc';
 const DEFAULT_WRITING_GID = '239920199';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+const CREDENTIAL_JSON_ENV_KEYS = [
+  'GOOGLE_CREDENTIALS_JSON',
+  'GOOGLE_SERVICE_ACCOUNT_KEY',
+  'GOOGLE_SERVICE_ACCOUNT_JSON',
+  'GOOGLE_APPLICATION_CREDENTIALS_JSON',
+  'GOOGLE_CREDENTIAL_JSON'
+];
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -44,7 +51,7 @@ function base64Url(input) {
 }
 
 function getServiceAccountCredentials() {
-  const rawJson = stripWrappingQuotes(process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_CREDENTIALS_JSON);
+  const rawJson = getFirstEnvValue(CREDENTIAL_JSON_ENV_KEYS);
   if (rawJson) {
     const parsed = JSON.parse(rawJson);
     return {
@@ -56,6 +63,28 @@ function getServiceAccountCredentials() {
   return {
     clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     privateKey: process.env.GOOGLE_PRIVATE_KEY
+  };
+}
+
+function getFirstEnvValue(keys) {
+  for (const key of keys) {
+    const value = stripWrappingQuotes(process.env[key]);
+    if (value) return value;
+  }
+  return '';
+}
+
+function getEnvPresence() {
+  return {
+    GOOGLE_CREDENTIALS_JSON: Boolean(stripWrappingQuotes(process.env.GOOGLE_CREDENTIALS_JSON)),
+    GOOGLE_SERVICE_ACCOUNT_KEY: Boolean(stripWrappingQuotes(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)),
+    GOOGLE_SERVICE_ACCOUNT_JSON: Boolean(stripWrappingQuotes(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)),
+    GOOGLE_APPLICATION_CREDENTIALS_JSON: Boolean(stripWrappingQuotes(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON)),
+    GOOGLE_CREDENTIAL_JSON: Boolean(stripWrappingQuotes(process.env.GOOGLE_CREDENTIAL_JSON)),
+    GOOGLE_SERVICE_ACCOUNT_EMAIL: Boolean(stripWrappingQuotes(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL)),
+    GOOGLE_PRIVATE_KEY: Boolean(stripWrappingQuotes(process.env.GOOGLE_PRIVATE_KEY)),
+    GOOGLE_SHEETS_SPREADSHEET_ID: Boolean(stripWrappingQuotes(process.env.GOOGLE_SHEETS_SPREADSHEET_ID)),
+    GOOGLE_SHEETS_WRITING_GID: Boolean(stripWrappingQuotes(process.env.GOOGLE_SHEETS_WRITING_GID))
   };
 }
 
@@ -104,6 +133,7 @@ async function getAccessToken() {
   if (!credentials.clientEmail || !credentials.privateKey) {
     const error = new Error('Google Sheets credentials are not configured.');
     error.statusCode = 500;
+    error.envPresence = getEnvPresence();
     throw error;
   }
 
@@ -220,7 +250,8 @@ export default async function handler(req, res) {
     } catch (error) {
       sendJson(res, error?.statusCode || 500, {
         ok: false,
-        error: error?.message || 'Writing log configuration check failed.'
+        error: error?.message || 'Writing log configuration check failed.',
+        envPresence: error?.envPresence || getEnvPresence()
       });
     }
     return;
@@ -248,7 +279,8 @@ export default async function handler(req, res) {
   } catch (error) {
     sendJson(res, error?.statusCode || 500, {
       error: error?.message || 'Could not save writing answer.',
-      detail: String(error?.message || error)
+      detail: String(error?.message || error),
+      envPresence: error?.envPresence
     });
   }
 }
